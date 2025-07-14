@@ -20,18 +20,16 @@ from uaproject_backend_schemas.models import (
 )
 
 from awesome_backend_client.base import BaseBackendModel
+from awesome_backend_client.models.application import Application
+from awesome_backend_client.models.balance import Balance
+from awesome_backend_client.models.punishment import Punishment
+from awesome_backend_client.models.transaction import Transaction
 
 if TYPE_CHECKING:
     from uaproject_backend_schemas.models.user import UserSchemaResponse
 
     from awesome_backend_client.client import UAProjectClient
-    from awesome_backend_client.models import (
-        Application,
-        Balance,
-        Punishment,
-        Transaction,
-        User,
-    )
+
 else:
     UserSchemaResponse = UserSchema.schemas.response
 
@@ -69,78 +67,62 @@ class User(BaseBackendModel, UserSchemaResponse):
         """Delete user"""
         return await self._client.users.delete(self.id)
 
-    async def get_balance(self) -> Optional["Balance"]:
+    async def get_balance(self) -> Optional[Balance]:
         """Get user's balance"""
-        try:
-            balance_data = await self._client.balances.get_many(
-                filters={"user_id": self.id}
-            )
-            if balance_data:
-                from .balance import Balance
+        balance_data = await self._client.balances.list(filters={"user_id": self.id})
+        if balance_data:
+            balance_schema = BalanceSchema.model_validate(balance_data[0])
+            return Balance(balance_schema, client=self._client)
 
-                balance_schema = BalanceSchema.model_validate(balance_data[0])
-                return Balance(balance_schema, client=self._client)
-        except Exception:
-            pass
-        return None
-
-    async def get_applications(self) -> list["Application"]:
+    async def get_application(self) -> list[Application]:
         """Get user's applications"""
-        try:
-            apps_data = await self._client.applications.get_many(
-                filters={"user_id": self.id}
-            )
-            from .application import Application
+        apps_data = await self._client.applications.list(filters={"user_id": self.id})
 
-            return [
-                Application(ApplicationSchema.model_validate(app), client=self._client)
-                for app in apps_data
-            ]
-        except Exception:
-            return []
+        return Application(
+            ApplicationSchema.model_validate(apps_data[0]), client=self._client
+        )
 
-    async def get_punishments(self, active_only: bool = True) -> list["Punishment"]:
+    async def get_punishments(self, active_only: bool = True) -> list[Punishment]:
         """Get user's punishments"""
-        try:
-            filters = {"user_id": self.id}
-            if active_only:
-                filters["is_active"] = True
+        filters = {"user_id": self.id}
+        if active_only:
+            filters["is_active"] = True
 
-            punishments_data = await self._client.punishments.get_many(filters=filters)
-            from .punishment import Punishment
+        punishments_data = await self._client.punishments.list(filters=filters)
 
-            return [
-                Punishment(PunishmentSchema.model_validate(p), client=self._client)
-                for p in punishments_data
-            ]
-        except Exception:
-            return []
+        return [
+            Punishment(PunishmentSchema.model_validate(p), client=self._client)
+            for p in punishments_data
+        ]
 
     async def add_balance(
         self, amount: float, reason: str = "Manual adjustment"
-    ) -> "Transaction":
+    ) -> Transaction:
         """Add balance to user"""
         transaction_data = await self._client.transactions.create(
-            {"user_id": self.id, "amount": amount, "type": "credit", "reason": reason}
+            {
+                "user_id": self.id,
+                "amount": amount,
+                "type": "adjustment",
+                "reason": reason,
+            }
         )
-        from .transaction import Transaction
 
         transaction_schema = TransactionSchema.model_validate(transaction_data)
         return Transaction(transaction_schema, client=self._client)
 
     async def remove_balance(
         self, amount: float, reason: str = "Manual adjustment"
-    ) -> "Transaction":
+    ) -> Transaction:
         """Remove balance from user"""
         transaction_data = await self._client.transactions.create(
             {
                 "user_id": self.id,
                 "amount": -abs(amount),
-                "type": "debit",
+                "type": "adjustment",
                 "reason": reason,
             }
         )
-        from .transaction import Transaction
 
         transaction_schema = TransactionSchema.model_validate(transaction_data)
         return Transaction(transaction_schema, client=self._client)
