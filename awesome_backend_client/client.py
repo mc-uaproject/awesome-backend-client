@@ -24,19 +24,11 @@ from .managers import (
     ApplicationManager,
     ApplicationSectionManager,
     BalanceManager,
-    ClaimManager,
     DebugManager,
     FileManager,
-    JudgingManager,
-    NewsManager,
-    PunishmentConfigManager,
     PunishmentManager,
-    PurchasedItemManager,
     RoleManager,
     ServiceManager,
-    TicketManager,
-    TicketMessageManager,
-    TokenManager,
     TransactionManager,
     UserManager,
     WebhookLogManager,
@@ -105,16 +97,8 @@ class UAProjectClient:
         self.balances = BalanceManager(self)
         self.transactions = TransactionManager(self)
         self.punishments = PunishmentManager(self)
-        self.punishment_configs = PunishmentConfigManager(self)
         self.services = ServiceManager(self)
-        self.claims = ClaimManager(self)
-        self.news = NewsManager(self)
-        self.judgings = JudgingManager(self)
-        self.tickets = TicketManager(self)
-        self.ticket_messages = TicketMessageManager(self)
         self.files = FileManager(self)
-        self.purchased_items = PurchasedItemManager(self)
-        self.tokens = TokenManager(self)
         self.webhooks = WebhookManager(self)
         self.webhook_logs = WebhookLogManager(self)
         self.debug = DebugManager(self)

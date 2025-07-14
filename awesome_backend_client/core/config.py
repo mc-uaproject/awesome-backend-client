@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,8 +19,8 @@ class AwesomeBackendClientSettings(BaseSettings):
     DEBUG: bool = False
 
     # Authentication
-    BACKEND_API_KEY: str
-    CALLBACK_SECRET: str
+    BACKEND_API_KEY: str | None = None
+    CALLBACK_SECRET: str | None = None
 
     # HTTP Client Configuration
     MAX_RETRIES: int = 3
@@ -43,8 +43,8 @@ class AwesomeBackendClientSettings(BaseSettings):
 
     # Webhook Auto-Registration
     WEBHOOK_AUTO_REGISTER: bool = True
-    WEBHOOK_ENDPOINT_URL: Optional[str] = None
-    WEBHOOK_SECRET: Optional[str] = None
+    WEBHOOK_ENDPOINT_URL: str | None = None
+    WEBHOOK_SECRET: str | None = None
     WEBHOOK_VERIFY_SIGNATURE: bool = False
 
     # Webhook Retry Configuration
