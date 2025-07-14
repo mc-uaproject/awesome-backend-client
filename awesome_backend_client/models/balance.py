@@ -11,12 +11,12 @@ from uaproject_backend_schemas.models import (
 )
 
 from awesome_backend_client.base import BaseBackendModel
-from awesome_backend_client.models.user import User
 
 if TYPE_CHECKING:
     from uaproject_backend_schemas.models.balance import BalanceSchemaResponse
 
     from awesome_backend_client.client import UAProjectClient
+    from awesome_backend_client.models.user import User
 else:
     BalanceSchemaResponse = BalanceSchema.schemas.response
 
@@ -47,14 +47,12 @@ class Balance(BaseBackendModel, BalanceSchemaResponse):
         self._schema = BalanceSchema.model_validate(updated_data)
         return self
 
-    async def get_user(self) -> Optional[User]:
+    async def get_user(self) -> Optional["User"]:
         """Get the user who owns this balance"""
-        try:
-            user_data = await self._client.users.get(self.user_id)
+        user_data = await self._client.users.get(self.user_id)
+        from awesome_backend_client.models.user import User
 
-            return User(UserSchema.model_validate(user_data), client=self._client)
-        except Exception:
-            return None
+        return User(UserSchema.model_validate(user_data), client=self._client)
 
     def __str__(self) -> str:
         return f"Balance(id={self.id}, amount={self.amount}, user_id={self.user_id})"
