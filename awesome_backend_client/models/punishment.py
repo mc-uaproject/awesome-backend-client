@@ -11,7 +11,7 @@ from uaproject_backend_schemas.models import (
 )
 
 from awesome_backend_client.base import BaseBackendModel
-from awesome_backend_client.models import User
+from awesome_backend_client.models.user import User
 
 if TYPE_CHECKING:
     from uaproject_backend_schemas.models.punishment import PunishmentSchemaResponse
