@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class ServiceError(Exception):
@@ -6,7 +6,7 @@ class ServiceError(Exception):
         super().__init__(message)
         self.status_code = status_code
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"error": self.message, "status_code": self.status_code}
 
 
@@ -24,7 +24,8 @@ class UserDataNotFoundError(Exception):
         self.username = username
         self.message = (
             message
-            or f"Користувача {f'@{username}' if username else ''} {f'(ID: {user_id})' if user_id else ''} не знайдено в базі даних"
+            or f"User {f'@{username}' if username else ''} "
+            f"{f'(ID: {user_id})' if user_id else ''} not found in database"
         )
         super().__init__(self.message)
 
@@ -34,8 +35,8 @@ class RequestError(Exception):
         self,
         message: str,
         endpoint: str,
-        params: Optional[Dict[str, Any]] = None,
-        original_error: Optional[str] = None,
+        params: dict[str, Any] | None = None,
+        original_error: str | None = None,
     ):
         self.message = message
         self.endpoint = endpoint
@@ -45,7 +46,9 @@ class RequestError(Exception):
 
     def __str__(self):
         error_details = (
-            f"RequestError: {self.message}\nEndpoint: {self.endpoint}\nParams: {self.params}"
+            f"RequestError: {self.message}\n"
+            f"Endpoint: {self.endpoint}\n"
+            f"Params: {self.params}"
         )
         if self.original_error:
             error_details += f"\nOriginal Error: {self.original_error}"
