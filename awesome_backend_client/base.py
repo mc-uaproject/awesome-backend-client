@@ -96,6 +96,7 @@ class BaseCRUDManager(
         limit: int = 100,
         sort: SortOrder | None = None,
         order: str = "asc",
+        _raise: bool = True,
         **filters: str | int | bool,
     ) -> list[BaseBackendModelType | dict[str, Any]]:
         """List resources with optional filtering and sorting"""
@@ -110,19 +111,31 @@ class BaseCRUDManager(
 
         data = await self.client.http.get(self.endpoint, params=params)
         if isinstance(data, list):
-            return self._convert_to_models(data)
+            results = self._convert_to_models(data)
+            if not results and not _raise:
+                return []
+            return results
         msg = f"Expected list response, got {type(data)}"
         raise TypeError(msg)
 
     async def get(
-        self, item_id: int | Literal["me"]
-    ) -> BaseBackendModelType | dict[str, Any]:
+        self, item_id: int | Literal["me"], *, _raise: bool = True
+    ) -> BaseBackendModelType | dict[str, Any] | None:
         """Get resource by ID or 'me'"""
-        data = await self.client.http.get(f"{self.endpoint}/{item_id}")
-        if isinstance(data, dict):
-            return self._convert_to_model(data)
-        msg = f"Expected dict response, got {type(data)}"
-        raise TypeError(msg)
+        try:
+            data = await self.client.http.get(f"{self.endpoint}/{item_id}")
+            if isinstance(data, dict):
+                return self._convert_to_model(data)
+            msg = f"Expected dict response, got {type(data)}"
+            raise TypeError(msg)
+        except Exception as e:
+            # Check if it's a 404 or similar "not found" error
+            if "404" in str(e) or "not found" in str(e).lower():
+                if _raise:
+                    raise
+                return None
+            # Re-raise other errors (network, auth, etc.)
+            raise
 
     async def create(
         self, data: CreateSchemaType | dict[str, Any]
@@ -151,6 +164,20 @@ class BaseCRUDManager(
     async def delete(self, item_id: int | Literal["me"]) -> None:
         """Delete resource by ID or 'me'"""
         await self.client.http.delete(f"{self.endpoint}/{item_id}")
+
+    async def get_by(self, *, _raise: bool = True, **filters: str | int | bool) -> BaseBackendModelType | dict[str, Any] | None:
+        """Get single resource by unique field(s). Raises error if not unique or not found."""
+        results = await self.list(limit=2, _raise=_raise, **filters)
+        
+        if not results:
+            return None
+        
+        if len(results) > 1:
+            filter_str = ", ".join(f"{k}={v}" for k, v in filters.items())
+            msg = f"Multiple {self.resource_name} found with {filter_str}, expected unique result"
+            raise ValueError(msg)
+        
+        return results[0]
 
     def extend_with_custom_methods(self, **custom_methods: Callable[..., Any]) -> None:
         """Dynamically add custom methods to this manager"""

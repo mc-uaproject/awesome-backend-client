@@ -85,3 +85,25 @@ class UserManager(
             return data
         msg = f"Expected dict response, got {type(data)}"
         raise TypeError(msg)
+
+    async def get_by_discord_id(self, discord_id: int | str, *, _raise: bool = True) -> User | None:
+        """Get user by Discord ID"""
+        result = await self.get_by(_raise=_raise, discord_id=str(discord_id))
+        if result is None:
+            return None
+        if isinstance(result, User):
+            return result
+        raise TypeError(f"Expected User, got {type(result)}")
+
+    async def get_by_nickname(self, nickname: str, *, _raise: bool = True) -> User | None:
+        """Get user by Minecraft nickname"""
+        result = await self.get_by(_raise=_raise, minecraft_nickname=nickname)
+        if result is None:
+            return None
+        if isinstance(result, User):
+            return result
+        raise TypeError(f"Expected User, got {type(result)}")
+
+    async def search_by_discord_id(self, discord_id: int | str) -> User | None:
+        """Search user by Discord ID (alias for get_by_discord_id)"""
+        return await self.get_by_discord_id(discord_id, _raise=False)

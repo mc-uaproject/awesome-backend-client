@@ -2,9 +2,17 @@
 
 from awesome_backend_client.base import BaseCRUDManager
 
+from .application import ApplicationManager
+from .application_section import ApplicationSectionManager
+from .balance import BalanceManager
+from .transaction import TransactionManager
 from .user import UserManager
 
 __all__ = [
     "BaseCRUDManager",
     "UserManager",
+    "BalanceManager",
+    "TransactionManager",
+    "ApplicationManager",
+    "ApplicationSectionManager",
 ]

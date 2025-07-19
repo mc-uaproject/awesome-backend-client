@@ -17,6 +17,10 @@ from .core.config import settings
 from .events import BackwardCompatibilityDecorators, UniversalEventManager
 from .http import APIResponse, HTTPClient
 from .managers import (
+    ApplicationManager,
+    ApplicationSectionManager,
+    BalanceManager,
+    TransactionManager,
     UserManager,
 )
 from .webhooks import WebhookRegistrar
@@ -76,6 +80,10 @@ class UAProjectClient:
 
         # Resource managers (discord.py style) - Universal CRUD for all resources
         self.users = UserManager(self)
+        self.balances = BalanceManager(self)
+        self.transactions = TransactionManager(self)
+        self.applications = ApplicationManager(self)
+        self.application_sections = ApplicationSectionManager(self)
 
         logger.debug(
             f"UAProjectClient initialized - impersonating: {impersonate_user_id}"
