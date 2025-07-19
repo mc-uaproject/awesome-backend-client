@@ -7,20 +7,15 @@ Uses existing backend patterns and schemas without duplication.
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from uaproject_backend_schemas.models import (
-    Application,
-    Balance,
-    Punishment,
-    Service,
-    Transaction,
     User,
 )
 
 from .core.config import settings
 from .events import BackwardCompatibilityDecorators, UniversalEventManager
-from .http import HTTPClient
+from .http import APIResponse, HTTPClient
 from .managers import (
     UserManager,
 )
@@ -74,7 +69,7 @@ class UAProjectClient:
         self._legacy_decorators = BackwardCompatibilityDecorators(self.events)
 
         # Legacy event system (for backward compatibility)
-        self._listeners: dict[str, list[Callable]] = {}
+        self._listeners: dict[str, list[Callable[..., Any]]] = {}
 
         # Webhook system
         self.webhook_registrar = WebhookRegistrar(self)
@@ -100,8 +95,11 @@ class UAProjectClient:
     # ==================== HTTP REQUEST METHODS ====================
 
     async def _request(
-        self, method: str, endpoint: str, **kwargs
-    ) -> dict[str, Any] | list[dict[str, Any]]:
+        self,
+        method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"],
+        endpoint: str,
+        **kwargs: Any,
+    ) -> APIResponse:
         """Make HTTP request with error handling"""
         if method == "GET":
             return await self.http.get(endpoint, **kwargs)
@@ -113,148 +111,49 @@ class UAProjectClient:
             return await self.http.patch(endpoint, **kwargs)
         if method == "DELETE":
             return await self.http.delete(endpoint, **kwargs)
-        raise ValueError(f"Unsupported HTTP method: {method}")
+        msg = f"Unsupported HTTP method: {method}"
+        raise ValueError(msg)
 
     # ==================== USER METHODS (discord.py style) ====================
 
     async def fetch_user(self, user_id: int) -> User | None:
         """Fetch user by ID (always from API, like discord.py fetch_user)"""
-        try:
-            data = await self.users.get(user_id)
-            return User.model_validate(data)
-        except Exception:
-            return None
+        data = await self.users.get(user_id)
+        return User.model_validate(data)
 
     async def get_user(self, user_id: int) -> User | None:
         """Get user by ID (same as fetch_user since caching disabled)"""
         return await self.fetch_user(user_id)
 
     @property
-    def user(self):
+    def user(self) -> UserManager:
         """Current user manager (like discord.py client.user)"""
         return self.users
 
-    async def fetch_users(self, *, limit: int = 50, **filters) -> list[User]:
+    async def fetch_users(self, *, limit: int = 50, **filters: Any) -> list[User]:
         """Fetch multiple users"""
-        try:
-            data = await self.users.list(limit=limit, **filters)
-            return [User.model_validate(user) for user in data]
-        except Exception:
-            return []
+        data = await self.users.list(limit=limit, **filters)
+        return [User.model_validate(user) for user in data]
 
     async def search_users(self, nickname: str, *, limit: int = 10) -> list[User]:
         """Search users by nickname"""
-        try:
-            data = await self.users.search_by_nickname(nickname, limit=limit)
-            return [User.model_validate(user) for user in data]
-        except Exception:
-            return []
+        data = await self.users.search_by_nickname(nickname, limit=limit)
+        return [User.model_validate(user) for user in data]
 
-    # ==================== APPLICATION METHODS ====================
-
-    async def fetch_application(self, app_id: int) -> Application | None:
-        """Fetch application by ID"""
-        try:
-            data = await self.applications.get(app_id)
-            return Application.model_validate(data)
-        except Exception:
-            return None
-
-    async def fetch_applications(
-        self, *, limit: int = 50, **filters
-    ) -> list[Application]:
-        """Fetch multiple applications"""
-        try:
-            data = await self.applications.list(limit=limit, **filters)
-            return [Application.model_validate(app) for app in data]
-        except Exception:
-            return []
-
-    # ==================== BALANCE METHODS ====================
-
-    async def fetch_balance(self, balance_id: int) -> Balance | None:
-        """Fetch balance by ID"""
-        try:
-            data = await self.balances.get(balance_id)
-            return Balance.model_validate(data)
-        except Exception:
-            return None
-
-    async def fetch_user_balance(self, user_id: int) -> Balance | None:
-        """Fetch specific user's balance"""
-        try:
-            data = await self.balances.list(user_id=user_id, limit=1)
-            if data:
-                return Balance.model_validate(data[0])
-        except Exception:
-            pass
-        return None
-
-    # ==================== TRANSACTION METHODS ====================
-
-    async def fetch_transaction(self, transaction_id: int) -> Transaction | None:
-        """Fetch transaction by ID"""
-        try:
-            data = await self.transactions.get(transaction_id)
-            return Transaction.model_validate(data)
-        except Exception:
-            return None
-
-    async def fetch_transactions(
-        self, *, limit: int = 50, **filters
-    ) -> list[Transaction]:
-        """Fetch multiple transactions"""
-        try:
-            data = await self.transactions.list(limit=limit, **filters)
-            return [Transaction.model_validate(tx) for tx in data]
-        except Exception:
-            return []
-
-    # ==================== PUNISHMENT METHODS ====================
-
-    async def fetch_punishment(self, punishment_id: int) -> Punishment | None:
-        """Fetch punishment by ID"""
-        try:
-            data = await self.punishments.get(punishment_id)
-            return Punishment.model_validate(data)
-        except Exception:
-            return None
-
-    # ==================== SERVICE METHODS ====================
-
-    async def fetch_service(self, service_id: int) -> Service | None:
-        """Fetch service by ID"""
-        try:
-            data = await self.services.get(service_id)
-            return Service.model_validate(data)
-        except Exception:
-            return None
-
-    # ==================== CREATE/UPDATE METHODS ====================
-
-    async def create_application(self, **app_data) -> Application | None:
-        """Create a new application"""
-        try:
-            data = await self.applications.create(app_data)
-            return Application.model_validate(data)
-        except Exception:
-            return None
-
-    async def update_user(self, user_id: int | str, **user_data) -> User | None:
+    async def update_user(
+        self, user_id: int | Literal["me"], **user_data: Any
+    ) -> User | None:
         """Update user data. Use 'me' for current user"""
-        try:
-            data = await self.users.update(user_id, user_data)
-            return User.model_validate(data)
-        except Exception:
-            return None
+        data = await self.users.update(user_id, user_data)
+        return User.model_validate(data)
 
-    async def update_me(self, **user_data) -> User | None:
+    async def update_me(self, **user_data: Any) -> User | None:
         """Update current user data"""
         return await self.update_user("me", **user_data)
 
     # ==================== EVENT SYSTEM ====================
 
-    def event(self, coro):
+    def event(self, coro: Callable[..., Any]) -> Callable[..., Any]:
         """
         Legacy decorator for event handlers (discord.py style)
 
@@ -265,9 +164,9 @@ class UAProjectClient:
             async def on_user_create(user):
                 print(f"New user created: {user.minecraft_nickname}")
         """
-        return self._legacy_decorators.event(coro)
+        return self._legacy_decorators.event(coro)  # type: ignore[no-any-return]
 
-    def listen(self, name: str | None = None):
+    def listen(self, name: str | None = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """
         Legacy decorator for event listeners with custom event names
 
@@ -278,40 +177,40 @@ class UAProjectClient:
             async def handle_new_user(user):
                 print(f"New user: {user.minecraft_nickname}")
         """
-        return self._legacy_decorators.listen(name)
+        return self._legacy_decorators.listen(name)  # type: ignore[no-any-return]
 
     # ==================== WEBHOOK METHODS ====================
 
     async def register_webhook_template(
-        self, template_name: str, endpoint: str, **kwargs
-    ):
+        self, template_name: str, endpoint: str, **kwargs: Any
+    ) -> Any:
         """Register a predefined webhook template"""
         return await self.webhook_registrar.register_template(
             template_name, endpoint, **kwargs
         )
 
-    async def auto_register_webhooks(self, base_endpoint: str):
+    async def auto_register_webhooks(self, base_endpoint: str) -> Any:
         """Automatically register common webhooks"""
         return await self.webhook_registrar.auto_register_common_webhooks(base_endpoint)
 
-    async def unregister_webhook(self, name: str):
+    async def unregister_webhook(self, name: str) -> Any:
         """Unregister a webhook by name"""
         return await self.webhook_registrar.unregister_webhook(name)
 
     @property
-    def registered_webhooks(self):
+    def registered_webhooks(self) -> dict[str, Any]:
         """Get registered webhooks"""
         return self.webhook_registrar.registered_webhooks
 
-    async def handle_webhook_payload(self, payload: dict[str, Any]):
+    async def handle_webhook_payload(self, payload: dict[str, Any]) -> Any:
         """Handle incoming webhook payload"""
         return await self.events.handle_webhook_payload(payload)
 
-    def list_event_handlers(self):
+    def list_event_handlers(self) -> dict[str, Any]:
         """List all registered event handlers"""
         return self.events.list_handlers()
 
-    def get_event_stats(self):
+    def get_event_stats(self) -> dict[str, Any]:
         """Get event system statistics"""
         return self.events.get_stats()
 
@@ -325,16 +224,16 @@ class UAProjectClient:
     async def subscribe_events(self, events: list[str]) -> bool:
         """Subscribe to WebSocket events"""
         if self._websocket and self._websocket.is_connected:
-            return await self._websocket.subscribe_events(events)
+            return bool(await self._websocket.subscribe_events(events))
         return False
 
     async def unsubscribe_events(self, events: list[str]) -> bool:
         """Unsubscribe from WebSocket events"""
         if self._websocket and self._websocket.is_connected:
-            return await self._websocket.unsubscribe_events(events)
+            return bool(await self._websocket.unsubscribe_events(events))
         return False
 
-    def add_event_listener(self, event: str, callback: Callable):
+    def add_event_listener(self, event: str, callback: Callable[..., Any]) -> None:
         """Add event listener for WebSocket events"""
         # Add to internal listeners
         if event not in self._listeners:
@@ -345,7 +244,7 @@ class UAProjectClient:
         if self._websocket:
             self._websocket.add_listener(event, callback)
 
-    def remove_event_listener(self, event: str, callback: Callable):
+    def remove_event_listener(self, event: str, callback: Callable) -> None:
         """Remove event listener"""
         # Remove from internal listeners
         if event in self._listeners and callback in self._listeners[event]:
@@ -368,10 +267,11 @@ class UAProjectClient:
 
     # ==================== LIFECYCLE METHODS ====================
 
-    async def start(self, *, connect_websocket: bool | None = None):
+    async def start(self, *, connect_websocket: bool | None = None) -> None:
         """Start the client and connect to WebSocket if requested"""
         if self._closed:
-            raise RuntimeError("Cannot start a closed client")
+            msg = "Cannot start a closed client"
+            raise RuntimeError(msg)
 
         try:
             # Use settings default if not specified
@@ -391,10 +291,10 @@ class UAProjectClient:
             logger.info("UAProjectClient is ready")
 
         except Exception as e:
-            logger.error(f"Client startup failed: {e}")
+            logger.exception(f"Client startup failed: {e}")
             raise
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the client and cleanup resources"""
         if self._closed:
             return
@@ -413,11 +313,11 @@ class UAProjectClient:
         logger.info("UAProjectClient closed")
 
     # Context manager support
-    async def __aenter__(self):
+    async def __aenter__(self) -> "UAProjectClient":
         await self.start()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         await self.close()
 
     # Utility methods
@@ -445,19 +345,19 @@ class UAProjectClient:
     class ImpersonationContext:
         """Context manager for temporary user impersonation"""
 
-        def __init__(self, client: "UAProjectClient", user_id: int):
+        def __init__(self, client: "UAProjectClient", user_id: int) -> None:
             self.client = client
             self.user_id = user_id
-            self.original_user_id = None
+            self.original_user_id: int | None = None
 
-        async def __aenter__(self):
+        async def __aenter__(self) -> "UAProjectClient.ImpersonationContext":
             self.original_user_id = self.client.impersonate_user_id
             self.client.impersonate_user_id = self.user_id
             if self.client._http_client:
                 self.client._http_client.set_impersonation(self.user_id)
             return self
 
-        async def __aexit__(self, exc_type, exc_val, exc_tb):
+        async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
             self.client.impersonate_user_id = self.original_user_id
             if self.client._http_client:
                 self.client._http_client.set_impersonation(self.original_user_id)

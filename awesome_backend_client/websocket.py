@@ -7,14 +7,19 @@ AwesomeBackendClientSettings for configuration.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from urllib.parse import urlparse
 
 import websockets
+from websockets.client import WebSocketClientProtocol
 from websockets.exceptions import ConnectionClosed, InvalidStatus, WebSocketException
+
+if TYPE_CHECKING:
+    from .client import UAProjectClient
 
 from .core.config import settings
 
@@ -29,9 +34,9 @@ class WebSocketClient:
     real-time event subscriptions with automatic reconnection.
     """
 
-    def __init__(self, client):
+    def __init__(self, client: "UAProjectClient") -> None:
         self.client = client
-        self._websocket: websockets.WebSocketServerProtocol | None = None
+        self._websocket: WebSocketClientProtocol | None = None
         self._listen_task: asyncio.Task | None = None
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = settings.WEBSOCKET_MAX_RECONNECT_ATTEMPTS
@@ -87,13 +92,13 @@ class WebSocketClient:
             return True
 
         except (InvalidStatus, OSError, WebSocketException) as e:
-            logger.error(f"WebSocket connection failed: {e}")
+            logger.exception(f"WebSocket connection failed: {e}")
             return False
         except Exception as e:
-            logger.error(f"Unexpected error during WebSocket connection: {e}")
+            logger.exception(f"Unexpected error during WebSocket connection: {e}")
             return False
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Disconnect from WebSocket"""
         logger.info("Disconnecting WebSocket")
 
@@ -103,10 +108,8 @@ class WebSocketClient:
         # Cancel listening task
         if self._listen_task and not self._listen_task.done():
             self._listen_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._listen_task
-            except asyncio.CancelledError:
-                pass
 
         # Close WebSocket connection
         if self._websocket and not self._websocket.closed:
@@ -115,7 +118,7 @@ class WebSocketClient:
         self._websocket = None
         self._listen_task = None
 
-    def add_listener(self, event: str, callback: Callable):
+    def add_listener(self, event: str, callback: Callable[[Any], Any]) -> None:
         """Add event listener"""
         if event not in self._listeners:
             self._listeners[event] = []
@@ -130,13 +133,13 @@ class WebSocketClient:
         self._listeners[event].append(callback)
         logger.debug(f"Added listener for event: {event}")
 
-    def remove_listener(self, event: str, callback: Callable):
+    def remove_listener(self, event: str, callback: Callable[[Any], Any]) -> None:
         """Remove event listener"""
         if event in self._listeners and callback in self._listeners[event]:
             self._listeners[event].remove(callback)
             logger.debug(f"Removed listener for event: {event}")
 
-    async def send_message(self, message: dict[str, Any]):
+    async def send_message(self, message: dict[str, Any]) -> bool:
         """Send message to WebSocket"""
         if not self._connected or not self._websocket:
             logger.warning("Cannot send message: WebSocket not connected")
@@ -146,10 +149,10 @@ class WebSocketClient:
             await self._websocket.send(json.dumps(message))
             return True
         except (ConnectionClosed, WebSocketException) as e:
-            logger.error(f"Failed to send WebSocket message: {e}")
+            logger.exception(f"Failed to send WebSocket message: {e}")
             return False
 
-    async def subscribe_events(self, events: list[str]):
+    async def subscribe_events(self, events: list[str]) -> bool:
         """Subscribe to specific events via WebSocket"""
         message = {"action": "subscribe", "events": events}
         success = await self.send_message(message)
@@ -157,7 +160,7 @@ class WebSocketClient:
             logger.debug(f"Subscribed to events: {events}")
         return success
 
-    async def unsubscribe_events(self, events: list[str]):
+    async def unsubscribe_events(self, events: list[str]) -> bool:
         """Unsubscribe from specific events via WebSocket"""
         message = {"action": "unsubscribe", "events": events}
         success = await self.send_message(message)
@@ -174,13 +177,13 @@ class WebSocketClient:
         ws_scheme = "wss" if parsed.scheme == "https" else "ws"
 
         # Build WebSocket URL
-        ws_url = f"{ws_scheme}://{parsed.netloc}{settings.API_PREFIX}{settings.WEBSOCKET_ENDPOINT}"
+        return f"{ws_scheme}://{parsed.netloc}{settings.API_PREFIX}{settings.WEBSOCKET_ENDPOINT}"
 
-        return ws_url
-
-    async def _listen_loop(self):
+    async def _listen_loop(self) -> None:
         """Main WebSocket listening loop"""
         try:
+            if self._websocket is None:
+                return
             async for message in self._websocket:
                 try:
                     # Parse JSON message
@@ -193,21 +196,21 @@ class WebSocketClient:
                     await self._handle_message(data)
 
                 except json.JSONDecodeError as e:
-                    logger.error(f"Failed to decode WebSocket message: {e}")
+                    logger.exception(f"Failed to decode WebSocket message: {e}")
                 except Exception as e:
-                    logger.error(f"Error processing WebSocket message: {e}")
+                    logger.exception(f"Error processing WebSocket message: {e}")
 
         except ConnectionClosed as e:
             logger.info(f"WebSocket connection closed: {e}")
         except WebSocketException as e:
-            logger.error(f"WebSocket error: {e}")
+            logger.exception(f"WebSocket error: {e}")
         except Exception as e:
-            logger.error(f"WebSocket listen loop error: {e}")
+            logger.exception(f"WebSocket listen loop error: {e}")
         finally:
             self._connected = False
             await self._handle_disconnect()
 
-    async def _handle_disconnect(self):
+    async def _handle_disconnect(self) -> None:
         """Handle WebSocket disconnection and potential reconnection"""
         if not self._should_reconnect:
             return
@@ -239,7 +242,7 @@ class WebSocketClient:
             if self._should_reconnect:
                 await self.connect()
 
-    async def _handle_message(self, data: dict[str, Any]):
+    async def _handle_message(self, data: dict[str, Any]) -> None:
         """Handle incoming WebSocket message"""
         try:
             event_type = data.get("type") or data.get("event")
@@ -272,22 +275,22 @@ class WebSocketClient:
                         await loop.run_in_executor(None, callback, event_data)
 
                 except asyncio.TimeoutError:
-                    logger.error(
+                    logger.exception(
                         f"Event handler for '{event_type}' timed out after "
                         f"{settings.EVENT_HANDLER_TIMEOUT}s"
                     )
                 except Exception as e:
-                    logger.error(
+                    logger.exception(
                         f"Error in WebSocket event callback for {event_type}: {e}"
                     )
 
         except Exception as e:
-            logger.error(f"Error handling WebSocket message: {e}")
+            logger.exception(f"Error handling WebSocket message: {e}")
 
     @property
     def is_connected(self) -> bool:
         """Check if WebSocket is connected"""
-        return self._connected and self._websocket and not self._websocket.closed
+        return bool(self._connected and self._websocket and not self._websocket.closed)
 
     @property
     def is_enabled(self) -> bool:

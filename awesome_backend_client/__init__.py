@@ -41,35 +41,35 @@ from .webhooks import (
 __version__ = "2.0.0"
 
 __all__ = [
-    # Main Client (discord.py style)
-    "UAProjectClient",
-    # Models
-    "User",
-    # Core
-    "HTTPClient",
-    "settings",
-    "get_logger",
-    "WebhookField",
-    # Webhook System
-    "WebhookConfig",
-    "WebhookRegistrar",
-    "WebhookSignatureValidator",
-    "WebhookTemplate",
-    # Event System
-    "EventSource",
-    "EventConfig",
-    "UniversalEventManager",
-    # Payload System
-    "DotDict",
-    "EventPayload",
-    "WebSocketPayload",
-    "WebhookPayload",
-    "create_payload",
+    "APIAuthenticationError",
     # Errors
     "APIConnectionError",
-    "APIAuthenticationError",
     "APIPermissionError",
     "APIRateLimitError",
     "APIServerError",
     "ConfigurationError",
+    # Payload System
+    "DotDict",
+    "EventConfig",
+    "EventPayload",
+    # Event System
+    "EventSource",
+    # Core
+    "HTTPClient",
+    # Main Client (discord.py style)
+    "UAProjectClient",
+    "UniversalEventManager",
+    # Models
+    "User",
+    "WebSocketPayload",
+    # Webhook System
+    "WebhookConfig",
+    "WebhookField",
+    "WebhookPayload",
+    "WebhookRegistrar",
+    "WebhookSignatureValidator",
+    "WebhookTemplate",
+    "create_payload",
+    "get_logger",
+    "settings",
 ]

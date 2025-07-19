@@ -8,11 +8,14 @@ registration.
 
 import asyncio
 import logging
-from collections.abc import Callable
-from enum import Enum
-from typing import Any
+from enum import StrEnum
+from typing import Any, Callable
 
 from pydantic import BaseModel, Field
+from uaproject_backend_schemas.models.schemas.webhook import (
+    WebhookAuthType,
+    WebhookEvent,
+)
 
 from .core.config import settings
 from .payload import EventPayload, create_payload
@@ -20,7 +23,7 @@ from .payload import EventPayload, create_payload
 logger = logging.getLogger(__name__)
 
 
-class EventSource(str, Enum):
+class EventSource(StrEnum):
     """Event source types"""
 
     WEBSOCKET = "websocket"
@@ -60,13 +63,13 @@ class EventConfig(BaseModel):
 class EventHandler:
     """Event handler wrapper"""
 
-    def __init__(self, handler: Callable, config: EventConfig, pattern: str):
+    def __init__(self, handler: Callable, config: EventConfig, pattern: str) -> None:
         self.handler = handler
         self.config = config
         self.pattern = pattern
         self.call_count = 0
-        self.last_called = None
-        self._rate_limiter = {}
+        self.last_called: float | None = None
+        self._rate_limiter: dict[str, list[float]] = {}
 
     async def __call__(self, payload: EventPayload) -> Any:
         """Execute the event handler with rate limiting and debouncing"""
@@ -92,12 +95,11 @@ class EventHandler:
             self._rate_limiter[self.pattern].append(current_time)
 
         # Debouncing
-        if self.config.debounce_ms:
-            if self.last_called:
-                time_diff = (current_time - self.last_called) * 1000
-                if time_diff < self.config.debounce_ms:
-                    logger.debug(f"Event {self.pattern} debounced")
-                    return None
+        if self.config.debounce_ms and self.last_called:
+            time_diff = (current_time - self.last_called) * 1000
+            if time_diff < self.config.debounce_ms:
+                logger.debug(f"Event {self.pattern} debounced")
+                return None
 
         self.last_called = current_time
         self.call_count += 1
@@ -107,13 +109,13 @@ class EventHandler:
                 return await self.handler(payload)
             return self.handler(payload)
         except Exception as e:
-            logger.error(f"Error in event handler {self.pattern}: {e}")
+            logger.exception(f"Error in event handler {self.pattern}: {e}")
 
 
 class UniversalEventManager:
     """Universal event manager for WebSocket and Webhook events"""
 
-    def __init__(self, client):
+    def __init__(self, client: Any) -> None:
         self.client = client
         self._handlers: dict[str, list[EventHandler]] = {}
         self._websocket_listeners: dict[str, list[Callable]] = {}
@@ -134,7 +136,7 @@ class UniversalEventManager:
         priority: int = 0,
         debounce_ms: int | None = None,
         rate_limit: int | None = None,
-    ):
+    ) -> Callable[[Callable], Callable]:
         """
         Universal event decorator
 
@@ -174,7 +176,7 @@ class UniversalEventManager:
                 print(f"Application event: {payload}")
         """
 
-        def decorator(func):
+        def decorator(func: Callable) -> Callable:
             # Parse pattern
             if "." in pattern:
                 pattern_model, pattern_action = pattern.split(".", 1)
@@ -215,7 +217,7 @@ class UniversalEventManager:
 
         return decorator
 
-    def _register_handler(self, pattern: str, handler: EventHandler):
+    def _register_handler(self, pattern: str, handler: EventHandler) -> None:
         """Register an event handler"""
         if pattern not in self._handlers:
             self._handlers[pattern] = []
@@ -236,7 +238,7 @@ class UniversalEventManager:
         # Lazy initialization of listeners
         self._ensure_listeners_registered(pattern, handler.config)
 
-    def _ensure_listeners_registered(self, pattern: str, config: EventConfig):
+    def _ensure_listeners_registered(self, pattern: str, config: EventConfig) -> None:
         """Ensure WebSocket and Webhook listeners are registered"""
         # Register WebSocket listeners
         if config.source in (EventSource.WEBSOCKET, EventSource.BOTH):
@@ -246,7 +248,7 @@ class UniversalEventManager:
         if config.source in (EventSource.WEBHOOK, EventSource.BOTH):
             self._register_webhook_listener(pattern, config)
 
-    def _register_websocket_listener(self, pattern: str, config: EventConfig):
+    def _register_websocket_listener(self, pattern: str, config: EventConfig) -> None:
         """Register WebSocket listener for pattern"""
         if not self.client._websocket:
             # WebSocket will be registered when connection is established
@@ -258,7 +260,7 @@ class UniversalEventManager:
         if pattern not in self._websocket_listeners:
             self._websocket_listeners[pattern] = []
 
-        async def websocket_handler(data):
+        async def websocket_handler(data: Any) -> None:
             """Handle WebSocket event"""
             # Build payload from WebSocket data
             payload = self._build_websocket_payload(data, pattern, config)
@@ -270,7 +272,7 @@ class UniversalEventManager:
 
         logger.debug(f"Registered WebSocket listener for: {pattern}")
 
-    def _register_webhook_listener(self, pattern: str, config: EventConfig):
+    def _register_webhook_listener(self, pattern: str, config: EventConfig) -> None:
         """Register Webhook listener for pattern"""
         if pattern in self._webhook_registrations:
             logger.debug(f"Webhook already registered for pattern: {pattern}")
@@ -282,7 +284,7 @@ class UniversalEventManager:
         self._webhook_registrations[pattern] = webhook_data
         logger.debug(f"Prepared webhook registration for: {pattern}")
 
-    async def _ensure_webhook_registered(self, pattern: str):
+    async def _ensure_webhook_registered(self, pattern: str) -> bool:
         """Ensure webhook is actually registered when needed"""
         if pattern not in self._webhook_registrations:
             return False
@@ -296,7 +298,6 @@ class UniversalEventManager:
         # Create webhook only when first event handler is registered
         if settings.WEBHOOK_AUTO_REGISTER and settings.WEBHOOK_ENDPOINT_URL:
             from .webhooks import (
-                WebhookAuthConfig,
                 WebhookAuthType,
                 WebhookConfig,
                 WebhookTrigger,
@@ -307,9 +308,13 @@ class UniversalEventManager:
             for trigger in config.triggers:
                 webhook_trigger = WebhookTrigger(
                     model_name=trigger.model,
-                    events=[trigger.action]
+                    events=[WebhookEvent(trigger.action)]
                     if trigger.action != "*"
-                    else ["create", "update", "delete"],
+                    else [
+                        WebhookEvent.CREATE,
+                        WebhookEvent.UPDATE,
+                        WebhookEvent.DELETE,
+                    ],
                     conditions=trigger.conditions,
                     fields=trigger.fields,
                 )
@@ -322,9 +327,8 @@ class UniversalEventManager:
                 ),
                 endpoint=f"{settings.WEBHOOK_ENDPOINT_URL}/{pattern.replace('.', '/')}",
                 triggers=triggers,
-                auth_config=WebhookAuthConfig(
-                    auth_type=WebhookAuthType.HMAC, secret_key=settings.WEBHOOK_SECRET
-                )
+                auth_type=WebhookAuthType.HMAC if settings.WEBHOOK_SECRET else None,
+                auth_config={"secret_key": settings.WEBHOOK_SECRET}
                 if settings.WEBHOOK_SECRET
                 else None,
                 **config.webhook_config,
@@ -370,7 +374,7 @@ class UniversalEventManager:
 
         return create_payload(payload_data, "websocket")
 
-    async def _handle_event(self, pattern: str, payload: EventPayload):
+    async def _handle_event(self, pattern: str, payload: EventPayload) -> None:
         """Handle event with all matching handlers"""
         matching_patterns = self._get_matching_patterns(pattern, payload)
 
@@ -380,7 +384,7 @@ class UniversalEventManager:
                     try:
                         await handler(payload)
                     except Exception as e:
-                        logger.error(f"Error in event handler {match_pattern}: {e}")
+                        logger.exception(f"Error in event handler {match_pattern}: {e}")
 
     def _get_matching_patterns(self, pattern: str, payload: EventPayload) -> list[str]:
         """Get all patterns that match the event"""
@@ -394,7 +398,7 @@ class UniversalEventManager:
             action = payload.get("event", payload.get("action", "*"))
 
         # Check all registered patterns
-        for registered_pattern in self._handlers.keys():
+        for registered_pattern in self._handlers:
             if self._pattern_matches(registered_pattern, model, action):
                 matching.append(registered_pattern)
 
@@ -409,16 +413,12 @@ class UniversalEventManager:
 
         # Check model match
         model_match = (
-            pattern_model == "*"
-            or pattern_model == model
-            or pattern_model.lower() == model.lower()
+            pattern_model in ("*", model) or pattern_model.lower() == model.lower()
         )
 
         # Check action match
         action_match = (
-            pattern_action == "*"
-            or pattern_action == action
-            or pattern_action.lower() == action.lower()
+            pattern_action in ("*", action) or pattern_action.lower() == action.lower()
         )
 
         return model_match and action_match
@@ -429,7 +429,7 @@ class UniversalEventManager:
 
         return datetime.utcnow().isoformat() + "Z"
 
-    async def handle_webhook_payload(self, payload_data: dict[str, Any]):
+    async def handle_webhook_payload(self, payload_data: dict[str, Any]) -> None:
         """Handle incoming webhook payload"""
         # Ensure webhook is registered for this payload
         event = payload_data.get("event", "")
@@ -444,7 +444,7 @@ class UniversalEventManager:
 
         await self._handle_event(pattern, payload)
 
-    async def initialize_deferred_websockets(self):
+    async def initialize_deferred_websockets(self) -> None:
         """Initialize WebSocket listeners that were deferred"""
         if not self.client._websocket:
             return
@@ -489,26 +489,26 @@ class UniversalEventManager:
 class BackwardCompatibilityDecorators:
     """Backward compatibility decorators"""
 
-    def __init__(self, event_manager: UniversalEventManager):
+    def __init__(self, event_manager: UniversalEventManager) -> None:
         self.event_manager = event_manager
 
-    def event(self, func):
+    def event(self, func: Callable) -> Callable:
         """Legacy @client.event decorator"""
         event_name = func.__name__
         event_name = event_name.removeprefix("on_")  # Remove 'on_' prefix
 
         return self.event_manager.on(event_name)(func)
 
-    def listen(self, name: str | None = None):
+    def listen(self, name: str | None = None) -> Callable[[Callable], Callable]:
         """Legacy @client.listen decorator"""
 
-        def decorator(func):
+        def decorator(func: Callable) -> Callable:
             event_name = name or func.__name__
             return self.event_manager.on(event_name)(func)
 
         return decorator
 
-    def on_webhook(self, pattern: str):
+    def on_webhook(self, pattern: str) -> Callable[[Callable], Callable]:
         """Legacy webhook decorator"""
         return self.event_manager.on(pattern, source=EventSource.WEBHOOK)
 

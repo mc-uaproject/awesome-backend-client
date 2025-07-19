@@ -58,19 +58,19 @@ class User(BaseBackendModel):
         """Get user's balance"""
         return await self.get("balance")
 
-    async def applications(self, status: str | None = None, **filters) -> list[Any]:
+    async def applications(self, status: str | None = None, **filters: Any) -> list[Any]:
         """Get user's applications"""
         if status:
             filters["status"] = status
         return await self.get("applications", filters=filters)
 
-    async def punishments(self, active_only: bool = True, **filters) -> list[Any]:
+    async def punishments(self, active_only: bool = True, **filters: Any) -> list[Any]:
         """Get user's punishments"""
         if active_only:
             filters["is_active"] = True
         return await self.get("punishments", filters=filters)
 
-    async def transactions(self, limit: int = 100, **filters) -> list[Any]:
+    async def transactions(self, limit: int = 100, **filters: Any) -> list[Any]:
         """Get user's transactions"""
         return await self.get("transactions", filters=filters, limit=limit)
 

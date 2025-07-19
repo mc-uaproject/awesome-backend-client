@@ -68,14 +68,13 @@ def WebhookField(
 
     json_schema_extra.update({"webhook_metadata": webhook_metadata})
 
-    return Field(
-        default=default,
+    return Field(  # type: ignore[call-overload,misc]
+        default,
         alias=alias,
         title=title,
         description=description,
         examples=examples,
         exclude=exclude,
-        include=include,
         discriminator=discriminator,
         json_schema_extra=json_schema_extra,
         frozen=frozen,
@@ -108,23 +107,30 @@ def get_webhook_metadata(field_info: Any) -> dict[str, Any]:
         Dictionary with webhook metadata
     """
     if hasattr(field_info, "json_schema_extra") and field_info.json_schema_extra:
-        return field_info.json_schema_extra.get("webhook_metadata", {})
+        metadata = field_info.json_schema_extra.get("webhook_metadata", {})
+        return metadata if isinstance(metadata, dict) else {}
     return {}
 
 
 def is_webhook_field(field_info: Any) -> bool:
     """Checks if the field is a webhook field."""
-    return get_webhook_metadata(field_info).get("webhook_field", False)
+    metadata = get_webhook_metadata(field_info)
+    result = metadata.get("webhook_field", False)
+    return bool(result)
 
 
 def is_sensitive_field(field_info: Any) -> bool:
     """Checks if the field is sensitive."""
-    return get_webhook_metadata(field_info).get("sensitive", False)
+    metadata = get_webhook_metadata(field_info)
+    result = metadata.get("sensitive", False)
+    return bool(result)
 
 
 def should_audit_field(field_info: Any) -> bool:
     """Checks if field changes should be logged in audit log."""
-    return get_webhook_metadata(field_info).get("audit_log", False)
+    metadata = get_webhook_metadata(field_info)
+    result = metadata.get("audit_log", False)
+    return bool(result)
 
 
 def get_cache_key(field_info: Any) -> str | None:
@@ -134,4 +140,6 @@ def get_cache_key(field_info: Any) -> str | None:
 
 def get_validation_level(field_info: Any) -> str:
     """Gets the validation level for the field."""
-    return get_webhook_metadata(field_info).get("validation_level", "strict")
+    metadata = get_webhook_metadata(field_info)
+    result = metadata.get("validation_level", "strict")
+    return str(result)

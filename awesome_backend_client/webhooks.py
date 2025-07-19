@@ -12,7 +12,6 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from pydantic import BaseModel
 from uaproject_backend_schemas.models.schemas.webhook import (
     ConditionOperator,
     WebhookAuthType,
@@ -30,12 +29,6 @@ from .core.config import settings
 logger = logging.getLogger(__name__)
 
 
-class WebhookAuthConfig(BaseModel):
-    auth_type: WebhookAuthType
-    secret_key: str | None = None
-    token: str | None = None
-    username: str | None = None
-    password: str | None = None
 
 
 class WebhookTemplate:
@@ -55,7 +48,7 @@ class WebhookTemplate:
                         WebhookEvent.CREATE,
                         WebhookEvent.UPDATE,
                         WebhookEvent.DELETE,
-                    ],
+                    ],  # type: ignore[list-item]
                     fields=[
                         WebhookFieldMapping(source_path="id", target_field="user_id"),
                         WebhookFieldMapping(
@@ -70,10 +63,8 @@ class WebhookTemplate:
                     ],
                 )
             ],
-            auth_config=WebhookAuthConfig(
-                auth_type=WebhookAuthType.HMAC,
-                secret_key=secret_key or settings.WEBHOOK_SECRET,
-            )
+            auth_type=WebhookAuthType.HMAC if secret_key or settings.WEBHOOK_SECRET else None,
+            auth_config={"secret_key": secret_key or settings.WEBHOOK_SECRET}
             if secret_key or settings.WEBHOOK_SECRET
             else None,
             retry_policy=WebhookRetryPolicy(),
@@ -91,7 +82,7 @@ class WebhookTemplate:
             triggers=[
                 WebhookTrigger(
                     model_name="Application",
-                    events=[WebhookEvent.CREATE, WebhookEvent.UPDATE],
+                    events=[WebhookEvent.CREATE, WebhookEvent.UPDATE],  # type: ignore[list-item]
                     conditions=WebhookConditionGroup(
                         operator="OR",
                         conditions=[
@@ -109,10 +100,8 @@ class WebhookTemplate:
                     ),
                 )
             ],
-            auth_config=WebhookAuthConfig(
-                auth_type=WebhookAuthType.HMAC,
-                secret_key=secret_key or settings.WEBHOOK_SECRET,
-            )
+            auth_type=WebhookAuthType.HMAC if secret_key or settings.WEBHOOK_SECRET else None,
+            auth_config={"secret_key": secret_key or settings.WEBHOOK_SECRET}
             if secret_key or settings.WEBHOOK_SECRET
             else None,
             retry_policy=WebhookRetryPolicy(),
@@ -130,26 +119,24 @@ class WebhookTemplate:
             triggers=[
                 WebhookTrigger(
                     model_name="Transaction",
-                    events=[WebhookEvent.CREATE],
+                    events=[WebhookEvent.CREATE],  # type: ignore[list-item]
                     conditions=WebhookConditionGroup(
                         operator="AND",
                         conditions=[
                             WebhookCondition(
-                                field="amount", operator=ConditionOperator.GT, value=0
+                                field="amount", operator=ConditionOperator.GREATER, value=0
                             ),
                             WebhookCondition(
                                 field="status",
-                                operator=ConditionOperator.EQ,
+                                operator=ConditionOperator.EQUALS,
                                 value="completed",
                             ),
                         ],
                     ),
                 )
             ],
-            auth_config=WebhookAuthConfig(
-                auth_type=WebhookAuthType.HMAC,
-                secret_key=secret_key or settings.WEBHOOK_SECRET,
-            )
+            auth_type=WebhookAuthType.HMAC if secret_key or settings.WEBHOOK_SECRET else None,
+            auth_config={"secret_key": secret_key or settings.WEBHOOK_SECRET}
             if secret_key or settings.WEBHOOK_SECRET
             else None,
             retry_policy=WebhookRetryPolicy(),
@@ -184,23 +171,22 @@ class WebhookSignatureValidator:
             algorithm, signature = signature_header.split("=", 1)
             return algorithm, signature
         except ValueError as e:
-            raise ValueError(
-                "Invalid signature format. Expected 'algorithm=signature'"
-            ) from e
+            msg = "Invalid signature format. Expected 'algorithm=signature'"
+            raise ValueError(msg) from e
 
 
 class WebhookRegistrar:
     """Automatic webhook registration and management"""
 
-    def __init__(self, client):
+    def __init__(self, client: Any) -> None:
         self.client = client
         self._registered_webhooks: dict[str, int] = {}
-        self._event_handlers: dict[str, list[Callable]] = {}
+        self._event_handlers: dict[str, list[Callable[..., Any]]] = {}
 
     async def register_webhook(self, config: WebhookConfig) -> int | None:
         """Register a webhook with the backend"""
         try:
-            webhook_data = {
+            webhook_data: dict[str, Any] = {
                 "name": config.name,
                 "description": config.description,
                 "endpoint": config.endpoint,
@@ -209,11 +195,11 @@ class WebhookRegistrar:
             }
 
             # Add authentication configuration
-            if config.auth_config:
-                webhook_data["auth_type"] = config.auth_config.auth_type.value
-                webhook_data["auth_config"] = self._prepare_auth_config(
-                    config.auth_config
-                )
+            if hasattr(config, 'auth_type') and config.auth_type:
+                webhook_data["auth_type"] = config.auth_type
+            
+            if hasattr(config, 'auth_config') and config.auth_config:
+                webhook_data["auth_config"] = config.auth_config
 
             # Add retry policy
             if config.retry_policy:
@@ -221,10 +207,10 @@ class WebhookRegistrar:
 
             # Add payload configuration
             if config.payload_config:
-                webhook_data["payload_config"] = config.payload_config
+                webhook_data["payload_config"] = config.payload_config.model_dump()
 
             response = await self.client.webhooks.create(webhook_data)
-            webhook_id = response["id"]
+            webhook_id = int(response["id"])
 
             self._registered_webhooks[config.name] = webhook_id
             logger.info(f"Registered webhook '{config.name}' with ID {webhook_id}")
@@ -232,32 +218,9 @@ class WebhookRegistrar:
             return webhook_id
 
         except Exception as e:
-            logger.error(f"Failed to register webhook '{config.name}': {e}")
+            logger.exception(f"Failed to register webhook '{config.name}': {e}")
             return None
 
-    def _prepare_auth_config(self, auth_config: WebhookAuthConfig) -> dict[str, Any]:
-        """Prepare auth config for API request"""
-        config_data = {}
-
-        if auth_config.auth_type == WebhookAuthType.BEARER and auth_config.token:
-            config_data["token"] = auth_config.token
-        elif auth_config.auth_type == WebhookAuthType.BASIC:
-            if auth_config.username and auth_config.password:
-                config_data["username"] = auth_config.username
-                config_data["password"] = auth_config.password
-        elif auth_config.auth_type == WebhookAuthType.API_KEY:
-            if auth_config.api_key_header and auth_config.api_key_value:
-                config_data["header"] = auth_config.api_key_header
-                config_data["value"] = auth_config.api_key_value
-        elif auth_config.auth_type == WebhookAuthType.HMAC and auth_config.secret_key:
-            config_data["secret_key"] = auth_config.secret_key
-        elif (
-            auth_config.auth_type == WebhookAuthType.CUSTOM
-            and auth_config.custom_headers
-        ):
-            config_data["headers"] = auth_config.custom_headers
-
-        return config_data
 
     async def unregister_webhook(self, name: str) -> bool:
         """Unregister a webhook by name"""
@@ -272,11 +235,11 @@ class WebhookRegistrar:
             logger.info(f"Unregistered webhook '{name}' (ID: {webhook_id})")
             return True
         except Exception as e:
-            logger.error(f"Failed to unregister webhook '{name}': {e}")
+            logger.exception(f"Failed to unregister webhook '{name}': {e}")
             return False
 
     async def register_template(
-        self, template_name: str, endpoint: str, **kwargs
+        self, template_name: str, endpoint: str, **kwargs: Any
     ) -> int | None:
         """Register a predefined webhook template"""
         templates = {
@@ -317,21 +280,22 @@ class WebhookRegistrar:
         status: str | None = None,
     ) -> list[dict[str, Any]]:
         """Get webhook execution logs"""
-        params = {"limit": limit}
+        params: dict[str, Any] = {"limit": limit}
         if webhook_id:
             params["webhook_id"] = webhook_id
         if status:
             params["status"] = status
 
-        return await self.client.webhook_logs.list(**params)
+        result = await self.client.webhook_logs.list(**params)
+        return result if isinstance(result, list) else []
 
-    def add_event_handler(self, event_pattern: str, handler: Callable):
+    def add_event_handler(self, event_pattern: str, handler: Callable[..., Any]) -> None:
         """Add event handler for webhook events"""
         if event_pattern not in self._event_handlers:
             self._event_handlers[event_pattern] = []
         self._event_handlers[event_pattern].append(handler)
 
-    async def _execute_handlers(self, pattern: str, payload: dict[str, Any]):
+    async def _execute_handlers(self, pattern: str, payload: dict[str, Any]) -> None:
         """Execute handlers for a specific event pattern"""
         if pattern in self._event_handlers:
             for handler in self._event_handlers[pattern]:
@@ -341,9 +305,9 @@ class WebhookRegistrar:
                     else:
                         handler(payload)
                 except Exception as e:
-                    logger.error(f"Error in webhook handler for {pattern}: {e}")
+                    logger.exception(f"Error in webhook handler for {pattern}: {e}")
 
-    async def handle_webhook_event(self, payload: dict[str, Any]):
+    async def handle_webhook_event(self, payload: dict[str, Any]) -> None:
         """Handle incoming webhook event"""
         event_type = payload.get("event")
         model = payload.get("model")
@@ -370,10 +334,10 @@ class WebhookRegistrar:
 class WebhookEventDecorator:
     """Decorator for webhook event handlers"""
 
-    def __init__(self, registrar: WebhookRegistrar):
+    def __init__(self, registrar: WebhookRegistrar) -> None:
         self.registrar = registrar
 
-    def on_webhook(self, event_pattern: str):
+    def on_webhook(self, event_pattern: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator for webhook event handlers
 
         Examples:
@@ -386,7 +350,7 @@ class WebhookEventDecorator:
                 print(f"Application event: {payload['event']}")
         """
 
-        def decorator(func):
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self.registrar.add_event_handler(event_pattern, func)
             return func
 
@@ -395,7 +359,6 @@ class WebhookEventDecorator:
 
 # Export main classes and functions
 __all__ = [
-    "WebhookAuthConfig",
     "WebhookAuthType",
     "WebhookConfig",
     "WebhookEvent",

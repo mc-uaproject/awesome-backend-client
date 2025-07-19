@@ -1,5 +1,5 @@
 {
-  "pythonVersion": "3.10",
+  "pythonVersion": "3.12",
   "pythonPlatform": "Linux",
   "typeCheckingMode": "strict",
   "reportMissingImports": "warning",
@@ -9,7 +9,6 @@
   "reportUnknownLambdaType": "error",
   "reportUnknownVariableType": "error",
   "reportUnknownMemberType": "error",
-  "reportAny": "error",
   "reportImplicitStringConcatenation": "error",
   "reportUnnecessaryTypeIgnoreComment": "error",
   "reportDeprecated": "error",

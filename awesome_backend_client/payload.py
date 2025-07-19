@@ -41,7 +41,7 @@ class DotDict(dict):
         payload.new_field = 'value'
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         # Convert nested dictionaries to DotDict
         for key, value in self.items():
@@ -50,7 +50,7 @@ class DotDict(dict):
             elif isinstance(value, list):
                 self[key] = self._convert_list(value)
 
-    def _convert_list(self, lst):
+    def _convert_list(self, lst: list[Any]) -> list[Any]:
         """Convert list items that are dicts to DotDict"""
         return [
             DotDict(item)
@@ -66,9 +66,8 @@ class DotDict(dict):
         try:
             return self[key]
         except KeyError as e:
-            raise AttributeError(
-                f"'{self.__class__.__name__}' object has no attribute '{key}'"
-            ) from e
+            msg = f"'{self.__class__.__name__}' object has no attribute '{key}'"
+            raise AttributeError(msg) from e
 
     def __setattr__(self, key: str, value: Any) -> None:
         """Allow dot notation access for setting values"""
@@ -91,9 +90,8 @@ class DotDict(dict):
         try:
             del self[key]
         except KeyError as e:
-            raise AttributeError(
-                f"'{self.__class__.__name__}' object has no attribute '{key}'"
-            ) from e
+            msg = f"'{self.__class__.__name__}' object has no attribute '{key}'"
+            raise AttributeError(msg) from e
 
     def __setitem__(self, key: str, value: Any) -> None:
         """Override setitem to convert nested dicts to DotDict"""
@@ -119,7 +117,7 @@ class DotDict(dict):
             return DotDict(value)
         return value
 
-    def update(self, *args, **kwargs) -> None:
+    def update(self, *args: Any, **kwargs: Any) -> None:
         """Update dictionary, converting nested dicts to DotDict"""
         if args:
             other = args[0]
@@ -135,7 +133,7 @@ class DotDict(dict):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert back to regular dictionary recursively"""
-        result = {}
+        result: dict[str, Any] = {}
         for key, value in self.items():
             if isinstance(value, DotDict):
                 result[key] = value.to_dict()
@@ -145,7 +143,7 @@ class DotDict(dict):
                 result[key] = value
         return result
 
-    def _convert_list_to_dict(self, lst):
+    def _convert_list_to_dict(self, lst: list[Any]) -> list[Any]:
         """Convert list with DotDict items back to regular dicts"""
         return [
             item.to_dict()
@@ -172,7 +170,7 @@ class EventPayload(DotDict):
     Provides structured access to common event fields and metadata.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
         # Ensure required fields exist with defaults
@@ -184,12 +182,19 @@ class EventPayload(DotDict):
     @property
     def event_type(self) -> str:
         """Get event type (e.g., 'create', 'update', 'delete')"""
-        return self.get("event", self.get("action", "unknown"))
+        event = self.get("event")
+        if isinstance(event, str):
+            return event
+        action = self.get("action")
+        if isinstance(action, str):
+            return action
+        return "unknown"
 
     @property
     def model_name(self) -> str:
         """Get model name (e.g., 'User', 'Application')"""
-        return self.get("model", "unknown")
+        model = self.get("model")
+        return model if isinstance(model, str) else "unknown"
 
     @property
     def event_pattern(self) -> str:
@@ -201,31 +206,39 @@ class EventPayload(DotDict):
         """Get user ID from various possible locations"""
         # Try different common locations for user_id
         if "user_id" in self:
-            return self.user_id
+            uid = self.get("user_id")
+            return uid if isinstance(uid, int) else None
         if hasattr(self.data, "user_id"):
-            return self.data.user_id
+            uid = getattr(self.data, "user_id")
+            return uid if isinstance(uid, int) else None
         if hasattr(self.data, "id") and self.model_name.lower() == "user":
-            return self.data.id
+            uid = getattr(self.data, "id")
+            return uid if isinstance(uid, int) else None
         if hasattr(self.data, "user") and hasattr(self.data.user, "id"):
-            return self.data.user.id
+            uid = getattr(self.data.user, "id")
+            return uid if isinstance(uid, int) else None
         return None
 
     @property
     def entity_id(self) -> int | str | None:
         """Get entity ID (the main object's ID)"""
         if hasattr(self.data, "id"):
-            return self.data.id
-        return self.get("id")
+            eid = getattr(self.data, "id")
+            return eid if isinstance(eid, (int, str)) else None
+        eid = self.get("id")
+        return eid if isinstance(eid, (int, str)) else None
 
     @property
     def is_websocket(self) -> bool:
         """Check if this is a WebSocket event"""
-        return self.source == "websocket"
+        source = self.get("source")
+        return bool(source == "websocket")
 
     @property
     def is_webhook(self) -> bool:
         """Check if this is a Webhook event"""
-        return self.source == "webhook"
+        source = self.get("source")
+        return bool(source == "webhook")
 
     @property
     def has_changes(self) -> bool:
@@ -267,9 +280,11 @@ class EventPayload(DotDict):
 
     def was_field_changed(self, field: str) -> bool:
         """Check if a specific field was changed"""
-        return self.get_field_change(field)["changed"]
+        change_info = self.get_field_change(field)
+        changed = change_info.get("changed", False)
+        return bool(changed)
 
-    def add_metadata(self, **kwargs) -> None:
+    def add_metadata(self, **kwargs: Any) -> None:
         """Add metadata to the event payload"""
         if not hasattr(self, "metadata"):
             self.metadata = DotDict()
@@ -287,7 +302,7 @@ class EventPayload(DotDict):
 
         try:
             for part in parts:
-                if isinstance(current, (dict, DotDict)):
+                if isinstance(current, dict | DotDict):
                     current = current[part]
                 else:
                     return default
@@ -331,7 +346,7 @@ class EventPayload(DotDict):
 class WebSocketPayload(EventPayload):
     """Specialized payload for WebSocket events"""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.source = "websocket"
         self.setdefault("real_time", True)
@@ -340,7 +355,7 @@ class WebSocketPayload(EventPayload):
 class WebhookPayload(EventPayload):
     """Specialized payload for Webhook events"""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.source = "webhook"
         self.setdefault("delivery_id", None)

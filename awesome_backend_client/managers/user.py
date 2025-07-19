@@ -36,7 +36,8 @@ class UserManager(
         result = await self.get("me")
         if isinstance(result, User):
             return result
-        raise TypeError(f"Expected User, got {type(result)}")
+        msg = f"Expected User, got {type(result)}"
+        raise TypeError(msg)
 
     async def search_by_nickname(
         self,
@@ -60,7 +61,8 @@ class UserManager(
             results = self._convert_to_models(data)
             # Filter out non-User objects
             return [item for item in results if isinstance(item, User)]
-        raise TypeError(f"Expected list response, got {type(data)}")
+        msg = f"Expected list response, got {type(data)}"
+        raise TypeError(msg)
 
     async def set_minecraft_nickname(self, nickname: str) -> User:
         """Set minecraft nickname for current user"""
@@ -71,12 +73,15 @@ class UserManager(
             result = self._convert_to_model(data)
             if isinstance(result, User):
                 return result
-            raise TypeError(f"Expected User, got {type(result)}")
-        raise TypeError(f"Expected dict response, got {type(data)}")
+            msg = f"Expected User, got {type(result)}"
+            raise TypeError(msg)
+        msg = f"Expected dict response, got {type(data)}"
+        raise TypeError(msg)
 
     async def get_permissions(self, user_id: int) -> dict[str, Any]:
         """Get user permissions"""
         data = await self.client.http.get(f"/users/{user_id}/permissions")
         if isinstance(data, dict):
             return data
-        raise TypeError(f"Expected dict response, got {type(data)}")
+        msg = f"Expected dict response, got {type(data)}"
+        raise TypeError(msg)

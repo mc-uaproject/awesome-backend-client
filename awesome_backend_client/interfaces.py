@@ -11,18 +11,18 @@ class IHTTPClient(Protocol):
     """Interface for HTTP clients"""
 
     async def get(
-        self, endpoint: str, **kwargs
+        self, endpoint: str, **kwargs: Any
     ) -> dict[str, Any] | list[dict[str, Any]] | str: ...
 
     async def post(
-        self, endpoint: str, **kwargs
+        self, endpoint: str, **kwargs: Any
     ) -> dict[str, Any] | list[dict[str, Any]] | str: ...
 
     async def put(
-        self, endpoint: str, **kwargs
+        self, endpoint: str, **kwargs: Any
     ) -> dict[str, Any] | list[dict[str, Any]] | str: ...
 
-    async def delete(self, endpoint: str, **kwargs) -> dict[str, Any] | str: ...
+    async def delete(self, endpoint: str, **kwargs: Any) -> dict[str, Any] | str: ...
 
     async def close(self) -> None: ...
 
@@ -59,7 +59,7 @@ class IEventManager(Protocol):
 class ICRUDManager(Protocol):
     """Interface for CRUD managers"""
 
-    async def list(self, **kwargs) -> list[dict[str, Any]]: ...
+    async def list(self, **kwargs: Any) -> list[dict[str, Any]]: ...
 
     async def get(self, item_id: int | str) -> dict[str, Any]: ...
 
@@ -88,13 +88,13 @@ class ISettings(Protocol):
 class BaseResourceManager(ABC):
     """Abstract base class for resource managers (LSP compliance)"""
 
-    def __init__(self, http_client: IHTTPClient, resource_name: str):
+    def __init__(self, http_client: IHTTPClient, resource_name: str) -> None:
         self._http_client = http_client
         self._resource_name = resource_name
         self._endpoint = f"/{resource_name}"
 
     @abstractmethod
-    async def list(self, **kwargs) -> list[dict[str, Any]]:
+    async def list(self, **kwargs: Any) -> list[dict[str, Any]]:
         """List resources"""
 
     @abstractmethod
@@ -130,11 +130,11 @@ class EventHandler(ABC):
 class IClientFactory(Protocol):
     """Factory interface for creating clients"""
 
-    def create_http_client(self, **kwargs) -> IHTTPClient: ...
+    def create_http_client(self, **kwargs: Any) -> IHTTPClient: ...
 
-    def create_websocket_client(self, **kwargs) -> IWebSocketClient: ...
+    def create_websocket_client(self, **kwargs: Any) -> IWebSocketClient: ...
 
-    def create_event_manager(self, **kwargs) -> IEventManager: ...
+    def create_event_manager(self, **kwargs: Any) -> IEventManager: ...
 
 
 class IServiceLocator(Protocol):

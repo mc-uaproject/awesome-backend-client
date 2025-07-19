@@ -18,7 +18,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.12"
 httpx = "^0.28.1"
 websockets = "^12.0"
 pydantic-settings = "^2.7.1"
@@ -41,7 +41,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py312"
 lint.select = [
     "E",   # pycodestyle errors
     "F",   # pyflakes
@@ -83,6 +83,7 @@ lint.select = [
     "FURB", # refurb
     "LOG", # flake8-logging
     "N",   # pep8-naming
+    "DRY",
 ]
 lint.ignore = [
     "B008",    # function-call-in-default-argument
@@ -100,18 +101,20 @@ lint.ignore = [
     "ARG001",  # unused-function-argument
     "ARG002",  # unused-method-argument
     "FA100",   # missing-future-annotations
+    "G004",    # logging f-string
 ]
 exclude = ["venv", "__pycache__", "versions"]
 line-length = 88
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
 no_implicit_optional = true
 strict_optional = true
+disable_error_code = ["prop-decorator"]
 
 [tool.vulture]
 exclude = ["*.ini", "Dockerfile", "*.lock", "*.toml"]

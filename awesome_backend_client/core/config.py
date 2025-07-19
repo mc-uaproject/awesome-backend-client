@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -129,7 +129,9 @@ class AwesomeBackendClientSettings(BaseSettings):
     @property
     def WEBSOCKET_URL(self) -> str:  # noqa: N802
         """WebSocket URL for real-time events"""
-        ws_scheme = "wss" if self.API_BASE_URL.startswith("https") else "ws"
+        ws_scheme: Literal["wss", "ws"] = (
+            "wss" if self.API_BASE_URL.startswith("https") else "ws"
+        )
         base_url = self.API_BASE_URL.replace("https://", "").replace("http://", "")
         return f"{ws_scheme}://{base_url}{self.API_PREFIX}{self.WEBSOCKET_ENDPOINT}"
 
@@ -145,9 +147,9 @@ class AwesomeBackendClientSettings(BaseSettings):
 
     @computed_field
     @property
-    def ENVIRONMENT_CONFIG(self) -> dict[str, str]:  # noqa: N802
+    def ENVIRONMENT_CONFIG(self) -> dict[str, Any]:  # noqa: N802
         """Environment-specific configuration"""
-        configs = {
+        configs: dict[str, dict[str, Any]] = {
             "local": {
                 "API_BASE_URL": "http://localhost:8001",
                 "LOG_LEVEL": "DEBUG",
@@ -163,7 +165,7 @@ class AwesomeBackendClientSettings(BaseSettings):
                 "RATE_LIMIT_ENABLED": True,
             },
         }
-        return configs.get(self.ENVIRONMENT, {})
+        return configs.get(self.ENVIRONMENT or "production", {})
 
     def get_cache_key(self, resource: str, identifier: str) -> str:
         """Generate cache key for resource"""

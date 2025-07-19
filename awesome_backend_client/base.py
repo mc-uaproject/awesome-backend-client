@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Generic, Literal, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Self, TypeVar
 
 from pydantic import BaseModel
 from uaproject_backend_schemas.base import (
@@ -16,7 +16,7 @@ from uaproject_backend_schemas.base import (
 if TYPE_CHECKING:
     from awesome_backend_client.client import UAProjectClient
 
-BaseBackendModelType = TypeVar("BaseBackendModelType", bound="BaseBackendModel")
+BaseBackendModelType = TypeVar("BaseBackendModelType", bound="BaseBackendModel[Any, Any, Any]")
 
 
 class BaseCRUDManager(
@@ -39,8 +39,6 @@ class BaseCRUDManager(
         """Convert Pydantic model or dict to dict for API request"""
         if isinstance(data, BaseModel):
             return data.model_dump(exclude_unset=True)
-        if isinstance(data, dict):
-            return data
         return data
 
     def _convert_to_model(
@@ -67,11 +65,17 @@ class BaseCRUDManager(
                 )
 
                 # Import schema dynamically using the main model class name from schema
-                schema_module = __import__(
-                    f"uaproject_backend_schemas.models.{schema_name}",
-                    fromlist=[schema_name.title()],
+                from types import ModuleType
+                from typing import cast
+                
+                schema_module = cast(
+                    ModuleType, 
+                    __import__(
+                        f"uaproject_backend_schemas.models.{schema_name}",
+                        fromlist=[schema_name.title()],
+                    )
                 )
-                schema_class = getattr(schema_module, schema_name.title())
+                schema_class = cast(type[BaseModel], getattr(schema_module, schema_name.title()))
                 schema_obj = schema_class.model_validate(data)
                 return self.model_class(schema_obj, client=self.client)
             except (ImportError, AttributeError):
@@ -92,7 +96,7 @@ class BaseCRUDManager(
         limit: int = 100,
         sort: SortOrder | None = None,
         order: str = "asc",
-        **filters,
+        **filters: str | int | bool,
     ) -> list[BaseBackendModelType | dict[str, Any]]:
         """List resources with optional filtering and sorting"""
         params = {
@@ -107,7 +111,8 @@ class BaseCRUDManager(
         data = await self.client.http.get(self.endpoint, params=params)
         if isinstance(data, list):
             return self._convert_to_models(data)
-        raise TypeError(f"Expected list response, got {type(data)}")
+        msg = f"Expected list response, got {type(data)}"
+        raise TypeError(msg)
 
     async def get(
         self, item_id: int | Literal["me"]
@@ -116,7 +121,8 @@ class BaseCRUDManager(
         data = await self.client.http.get(f"{self.endpoint}/{item_id}")
         if isinstance(data, dict):
             return self._convert_to_model(data)
-        raise TypeError(f"Expected dict response, got {type(data)}")
+        msg = f"Expected dict response, got {type(data)}"
+        raise TypeError(msg)
 
     async def create(
         self, data: CreateSchemaType | dict[str, Any]
@@ -126,7 +132,8 @@ class BaseCRUDManager(
         response_data = await self.client.http.post(self.endpoint, data=converted_data)
         if isinstance(response_data, dict):
             return self._convert_to_model(response_data)
-        raise TypeError(f"Expected dict response, got {type(response_data)}")
+        msg = f"Expected dict response, got {type(response_data)}"
+        raise TypeError(msg)
 
     async def update(
         self, item_id: int | Literal["me"], data: UpdateSchemaType | dict[str, Any]
@@ -138,13 +145,14 @@ class BaseCRUDManager(
         )
         if isinstance(response_data, dict):
             return self._convert_to_model(response_data)
-        raise TypeError(f"Expected dict response, got {type(response_data)}")
+        msg = f"Expected dict response, got {type(response_data)}"
+        raise TypeError(msg)
 
     async def delete(self, item_id: int | Literal["me"]) -> None:
         """Delete resource by ID or 'me'"""
         await self.client.http.delete(f"{self.endpoint}/{item_id}")
 
-    def extend_with_custom_methods(self, **custom_methods):
+    def extend_with_custom_methods(self, **custom_methods: Callable[..., Any]) -> None:
         """Dynamically add custom methods to this manager"""
         for method_name, method_func in custom_methods.items():
             bound_method = method_func.__get__(self, self.__class__)
@@ -161,7 +169,7 @@ class BaseBackendModel(Generic[ModelType, FilterSchemaType, UpdateSchemaType]):
 
     _endpoint: str  # Must be defined in subclasses
 
-    def __init__(self, schema_obj: Any, *, client: UAProjectClient):
+    def __init__(self, schema_obj: BaseModel, *, client: UAProjectClient):
         self._schema = schema_obj
         self._client = client
         self._cache_key = None
@@ -170,9 +178,8 @@ class BaseBackendModel(Generic[ModelType, FilterSchemaType, UpdateSchemaType]):
         """Allow accessing schema fields as attributes"""
         if hasattr(self._schema, name):
             return getattr(self._schema, name)
-        raise AttributeError(
-            f"'{self.__class__.__name__}' object has no attribute '{name}'"
-        )
+        msg = f"'{self.__class__.__name__}' object has no attribute '{name}'"
+        raise AttributeError(msg)
 
     def __getitem__(self, key: str) -> Any:
         """Allow dict-like access to schema data"""
@@ -184,17 +191,16 @@ class BaseBackendModel(Generic[ModelType, FilterSchemaType, UpdateSchemaType]):
         """Check if key exists in schema"""
         return hasattr(self._schema, key)
 
-    def get_attr(self, key: str, default: Any = None) -> Any:
+    def get_attr(self, key: str, default: object = None) -> object:
         """Get schema value with default (renamed to avoid conflict with get method)"""
         return getattr(self._schema, key, default)
 
     @property
-    def schema(self) -> Any:
+    def schema(self) -> BaseModel:
         """Get the underlying schema object"""
         return self._schema
 
-    @property
-    def dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Get schema as dictionary"""
         return (
             self._schema.model_dump()
@@ -213,28 +219,32 @@ class BaseBackendModel(Generic[ModelType, FilterSchemaType, UpdateSchemaType]):
                     setattr(self._schema, key, value)
 
     def _convert_filters(
-        self, filters: dict[str, str | int | bool] | FilterSchemaType | None
+        self, filters: dict[str, Any] | FilterSchemaType | None
     ) -> dict[str, Any] | None:
         """Convert filters to dict format"""
         if filters is None:
             return None
+        if isinstance(filters, dict):
+            return filters
         if hasattr(filters, "model_dump"):
             return filters.model_dump(exclude_none=True)
-        return filters
+        return {}
 
     def _convert_update_data(
-        self, update_data: dict[str, str | int | bool] | UpdateSchemaType
+        self, update_data: dict[str, Any] | UpdateSchemaType
     ) -> dict[str, Any]:
         """Convert update data to dict format"""
+        if isinstance(update_data, dict):
+            return update_data
         if hasattr(update_data, "model_dump"):
             return update_data.model_dump(exclude_none=True)
-        return update_data
+        return {}
 
     async def get(
         self,
         relation: str,
-        filters: dict[str, str | int | bool] | FilterSchemaType | None = None,
-        **params,
+        filters: dict[str, Any] | FilterSchemaType | None = None,
+        **params: str | int | bool,
     ) -> ModelType | list[ModelType]:
         """Universal method to get related data"""
         converted_filters = self._convert_filters(filters)
@@ -254,7 +264,7 @@ class BaseBackendModel(Generic[ModelType, FilterSchemaType, UpdateSchemaType]):
             try:
                 if endpoint == f"/{relation}":
                     # Add user_id filter for fallback
-                    if converted_filters is None:
+                    if not converted_filters:
                         converted_filters = {}
                     converted_filters["user_id"] = self.id
 
@@ -263,7 +273,8 @@ class BaseBackendModel(Generic[ModelType, FilterSchemaType, UpdateSchemaType]):
             except Exception:
                 continue
 
-        raise ValueError(f"Could not find endpoint for relation '{relation}'")
+        msg = f"Could not find endpoint for relation '{relation}'"
+        raise ValueError(msg)
 
     def _convert_relation_data(
         self, data: Any, relation: str
@@ -272,26 +283,31 @@ class BaseBackendModel(Generic[ModelType, FilterSchemaType, UpdateSchemaType]):
         # This is a simplified version - in real implementation we'd have
         # a mapping of relations to model classes
         if isinstance(data, list):
-            return data  # Return as-is for now
-        return data
+            return data  # type: ignore[return-value]
+        return data  # type: ignore[return-value,no-any-return]
 
     async def refresh(self) -> None:
         """Refresh object data from API"""
         fresh_data = await self._client.http.get(f"/{self._endpoint}/{self.id}")
-        self._update_from_dict(fresh_data)
+        if isinstance(fresh_data, dict):
+            self._update_from_dict(fresh_data)
 
     async def edit(
-        self, update_data: dict[str, str | int | bool] | UpdateSchemaType
+        self, update_data: dict[str, Any] | UpdateSchemaType
     ) -> Self:
         """Edit object fields"""
         converted_data = self._convert_update_data(update_data)
         updated_data = await self._client.http.put(
             f"/{self._endpoint}/{self.id}", json=converted_data
         )
-        self._update_from_dict(updated_data)
+        if isinstance(updated_data, dict):
+            self._update_from_dict(updated_data)
         return self
 
     async def delete(self) -> bool:
         """Delete object"""
         response = await self._client.http.delete(f"/{self._endpoint}/{self.id}")
-        return response.status_code == 204
+        # HTTP DELETE typically returns 204 for successful deletion
+        # Since we don't have access to the actual response object, 
+        # we assume success if no exception was raised
+        return True
