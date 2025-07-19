@@ -6,7 +6,8 @@ Uses existing backend patterns and schemas without duplication.
 """
 
 import logging
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any
 
 from uaproject_backend_schemas.models import (
     Application,
@@ -21,18 +22,7 @@ from .core.config import settings
 from .events import BackwardCompatibilityDecorators, UniversalEventManager
 from .http import HTTPClient
 from .managers import (
-    ApplicationManager,
-    ApplicationSectionManager,
-    BalanceManager,
-    DebugManager,
-    FileManager,
-    PunishmentManager,
-    RoleManager,
-    ServiceManager,
-    TransactionManager,
     UserManager,
-    WebhookLogManager,
-    WebhookManager,
 )
 from .webhooks import WebhookRegistrar
 from .websocket import WebSocketClient
@@ -64,9 +54,9 @@ class UAProjectClient:
     def __init__(
         self,
         *,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        impersonate_user_id: Optional[int] = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        impersonate_user_id: int | None = None,
     ):
         """Initialize UAProject client"""
         self.api_key = api_key or settings.BACKEND_API_KEY
@@ -76,8 +66,8 @@ class UAProjectClient:
         # Internal state
         self._ready = False
         self._closed = False
-        self._http_client: Optional[HTTPClient] = None
-        self._websocket: Optional[WebSocketClient] = None
+        self._http_client: HTTPClient | None = None
+        self._websocket: WebSocketClient | None = None
 
         # Universal Event System (NEW)
         self.events = UniversalEventManager(self)
@@ -91,17 +81,6 @@ class UAProjectClient:
 
         # Resource managers (discord.py style) - Universal CRUD for all resources
         self.users = UserManager(self)
-        self.roles = RoleManager(self)
-        self.applications = ApplicationManager(self)
-        self.application_sections = ApplicationSectionManager(self)
-        self.balances = BalanceManager(self)
-        self.transactions = TransactionManager(self)
-        self.punishments = PunishmentManager(self)
-        self.services = ServiceManager(self)
-        self.files = FileManager(self)
-        self.webhooks = WebhookManager(self)
-        self.webhook_logs = WebhookLogManager(self)
-        self.debug = DebugManager(self)
 
         logger.debug(
             f"UAProjectClient initialized - impersonating: {impersonate_user_id}"
@@ -122,24 +101,23 @@ class UAProjectClient:
 
     async def _request(
         self, method: str, endpoint: str, **kwargs
-    ) -> Union[dict[str, Any], list[dict[str, Any]]]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Make HTTP request with error handling"""
         if method == "GET":
             return await self.http.get(endpoint, **kwargs)
-        elif method == "POST":
+        if method == "POST":
             return await self.http.post(endpoint, **kwargs)
-        elif method == "PUT":
+        if method == "PUT":
             return await self.http.put(endpoint, **kwargs)
-        elif method == "PATCH":
+        if method == "PATCH":
             return await self.http.patch(endpoint, **kwargs)
-        elif method == "DELETE":
+        if method == "DELETE":
             return await self.http.delete(endpoint, **kwargs)
-        else:
-            raise ValueError(f"Unsupported HTTP method: {method}")
+        raise ValueError(f"Unsupported HTTP method: {method}")
 
     # ==================== USER METHODS (discord.py style) ====================
 
-    async def fetch_user(self, user_id: int) -> Optional[User]:
+    async def fetch_user(self, user_id: int) -> User | None:
         """Fetch user by ID (always from API, like discord.py fetch_user)"""
         try:
             data = await self.users.get(user_id)
@@ -147,7 +125,7 @@ class UAProjectClient:
         except Exception:
             return None
 
-    async def get_user(self, user_id: int) -> Optional[User]:
+    async def get_user(self, user_id: int) -> User | None:
         """Get user by ID (same as fetch_user since caching disabled)"""
         return await self.fetch_user(user_id)
 
@@ -174,7 +152,7 @@ class UAProjectClient:
 
     # ==================== APPLICATION METHODS ====================
 
-    async def fetch_application(self, app_id: int) -> Optional[Application]:
+    async def fetch_application(self, app_id: int) -> Application | None:
         """Fetch application by ID"""
         try:
             data = await self.applications.get(app_id)
@@ -194,7 +172,7 @@ class UAProjectClient:
 
     # ==================== BALANCE METHODS ====================
 
-    async def fetch_balance(self, balance_id: int) -> Optional[Balance]:
+    async def fetch_balance(self, balance_id: int) -> Balance | None:
         """Fetch balance by ID"""
         try:
             data = await self.balances.get(balance_id)
@@ -202,7 +180,7 @@ class UAProjectClient:
         except Exception:
             return None
 
-    async def fetch_user_balance(self, user_id: int) -> Optional[Balance]:
+    async def fetch_user_balance(self, user_id: int) -> Balance | None:
         """Fetch specific user's balance"""
         try:
             data = await self.balances.list(user_id=user_id, limit=1)
@@ -214,7 +192,7 @@ class UAProjectClient:
 
     # ==================== TRANSACTION METHODS ====================
 
-    async def fetch_transaction(self, transaction_id: int) -> Optional[Transaction]:
+    async def fetch_transaction(self, transaction_id: int) -> Transaction | None:
         """Fetch transaction by ID"""
         try:
             data = await self.transactions.get(transaction_id)
@@ -234,7 +212,7 @@ class UAProjectClient:
 
     # ==================== PUNISHMENT METHODS ====================
 
-    async def fetch_punishment(self, punishment_id: int) -> Optional[Punishment]:
+    async def fetch_punishment(self, punishment_id: int) -> Punishment | None:
         """Fetch punishment by ID"""
         try:
             data = await self.punishments.get(punishment_id)
@@ -244,7 +222,7 @@ class UAProjectClient:
 
     # ==================== SERVICE METHODS ====================
 
-    async def fetch_service(self, service_id: int) -> Optional[Service]:
+    async def fetch_service(self, service_id: int) -> Service | None:
         """Fetch service by ID"""
         try:
             data = await self.services.get(service_id)
@@ -254,7 +232,7 @@ class UAProjectClient:
 
     # ==================== CREATE/UPDATE METHODS ====================
 
-    async def create_application(self, **app_data) -> Optional[Application]:
+    async def create_application(self, **app_data) -> Application | None:
         """Create a new application"""
         try:
             data = await self.applications.create(app_data)
@@ -262,9 +240,7 @@ class UAProjectClient:
         except Exception:
             return None
 
-    async def update_user(
-        self, user_id: Union[int, str], **user_data
-    ) -> Optional[User]:
+    async def update_user(self, user_id: int | str, **user_data) -> User | None:
         """Update user data. Use 'me' for current user"""
         try:
             data = await self.users.update(user_id, user_data)
@@ -272,7 +248,7 @@ class UAProjectClient:
         except Exception:
             return None
 
-    async def update_me(self, **user_data) -> Optional[User]:
+    async def update_me(self, **user_data) -> User | None:
         """Update current user data"""
         return await self.update_user("me", **user_data)
 
@@ -291,7 +267,7 @@ class UAProjectClient:
         """
         return self._legacy_decorators.event(coro)
 
-    def listen(self, name: Optional[str] = None):
+    def listen(self, name: str | None = None):
         """
         Legacy decorator for event listeners with custom event names
 
@@ -342,7 +318,7 @@ class UAProjectClient:
     # ==================== WEBSOCKET METHODS ====================
 
     @property
-    def websocket(self) -> Optional[WebSocketClient]:
+    def websocket(self) -> WebSocketClient | None:
         """Get WebSocket client instance"""
         return self._websocket
 
@@ -392,7 +368,7 @@ class UAProjectClient:
 
     # ==================== LIFECYCLE METHODS ====================
 
-    async def start(self, *, connect_websocket: Optional[bool] = None):
+    async def start(self, *, connect_websocket: bool | None = None):
         """Start the client and connect to WebSocket if requested"""
         if self._closed:
             raise RuntimeError("Cannot start a closed client")
@@ -441,7 +417,7 @@ class UAProjectClient:
         await self.start()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):  # noqa: U100
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
     # Utility methods
@@ -481,7 +457,7 @@ class UAProjectClient:
                 self.client._http_client.set_impersonation(self.user_id)
             return self
 
-        async def __aexit__(self, exc_type, exc_val, exc_tb):  # noqa: U100
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
             self.client.impersonate_user_id = self.original_user_id
             if self.client._http_client:
                 self.client._http_client.set_impersonation(self.original_user_id)

@@ -8,8 +8,9 @@ registration.
 
 import asyncio
 import logging
+from collections.abc import Callable
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -32,10 +33,10 @@ class EventTrigger(BaseModel):
 
     model: str = Field(..., description="Model name (User, Application, etc.)")
     action: str = Field(..., description="Action (create, update, delete, etc.)")
-    conditions: Optional[dict[str, Any]] = Field(
+    conditions: dict[str, Any] | None = Field(
         None, description="Conditions for triggering"
     )
-    fields: Optional[list[str]] = Field(
+    fields: list[str] | None = Field(
         None, description="Specific fields to watch for changes"
     )
 
@@ -45,17 +46,15 @@ class EventConfig(BaseModel):
 
     source: EventSource = Field(EventSource.BOTH, description="Event source")
     triggers: list[EventTrigger] = Field(..., description="Event triggers")
-    webhook_config: Optional[dict[str, Any]] = Field(
+    webhook_config: dict[str, Any] | None = Field(
         None, description="Webhook-specific configuration"
     )
-    websocket_config: Optional[dict[str, Any]] = Field(
+    websocket_config: dict[str, Any] | None = Field(
         None, description="WebSocket-specific configuration"
     )
     priority: int = Field(0, description="Event priority (higher = first)")
-    debounce_ms: Optional[int] = Field(
-        None, description="Debounce delay in milliseconds"
-    )
-    rate_limit: Optional[int] = Field(None, description="Max events per second")
+    debounce_ms: int | None = Field(None, description="Debounce delay in milliseconds")
+    rate_limit: int | None = Field(None, description="Max events per second")
 
 
 class EventHandler:
@@ -88,7 +87,7 @@ class EventHandler:
 
             if len(self._rate_limiter[self.pattern]) >= self.config.rate_limit:
                 logger.warning(f"Rate limit exceeded for event {self.pattern}")
-                return
+                return None
 
             self._rate_limiter[self.pattern].append(current_time)
 
@@ -98,7 +97,7 @@ class EventHandler:
                 time_diff = (current_time - self.last_called) * 1000
                 if time_diff < self.config.debounce_ms:
                     logger.debug(f"Event {self.pattern} debounced")
-                    return
+                    return None
 
         self.last_called = current_time
         self.call_count += 1
@@ -106,8 +105,7 @@ class EventHandler:
         try:
             if asyncio.iscoroutinefunction(self.handler):
                 return await self.handler(payload)
-            else:
-                return self.handler(payload)
+            return self.handler(payload)
         except Exception as e:
             logger.error(f"Error in event handler {self.pattern}: {e}")
 
@@ -127,15 +125,15 @@ class UniversalEventManager:
         pattern: str,
         *,
         source: EventSource = EventSource.BOTH,
-        model: Optional[str] = None,
-        action: Optional[str] = None,
-        conditions: Optional[dict[str, Any]] = None,
-        fields: Optional[list[str]] = None,
-        webhook_config: Optional[dict[str, Any]] = None,
-        websocket_config: Optional[dict[str, Any]] = None,
+        model: str | None = None,
+        action: str | None = None,
+        conditions: dict[str, Any] | None = None,
+        fields: list[str] | None = None,
+        webhook_config: dict[str, Any] | None = None,
+        websocket_config: dict[str, Any] | None = None,
         priority: int = 0,
-        debounce_ms: Optional[int] = None,
-        rate_limit: Optional[int] = None,
+        debounce_ms: int | None = None,
+        rate_limit: int | None = None,
     ):
         """
         Universal event decorator
@@ -341,9 +339,8 @@ class UniversalEventManager:
                 webhook_data["webhook_id"] = webhook_id
                 logger.info(f"Registered webhook {webhook_id} for pattern: {pattern}")
                 return True
-            else:
-                logger.error(f"Failed to register webhook for pattern: {pattern}")
-                return False
+            logger.error(f"Failed to register webhook for pattern: {pattern}")
+            return False
 
         return False
 
@@ -498,12 +495,11 @@ class BackwardCompatibilityDecorators:
     def event(self, func):
         """Legacy @client.event decorator"""
         event_name = func.__name__
-        if event_name.startswith("on_"):
-            event_name = event_name[3:]  # Remove 'on_' prefix
+        event_name = event_name.removeprefix("on_")  # Remove 'on_' prefix
 
         return self.event_manager.on(event_name)(func)
 
-    def listen(self, name: Optional[str] = None):
+    def listen(self, name: str | None = None):
         """Legacy @client.listen decorator"""
 
         def decorator(func):
@@ -519,10 +515,10 @@ class BackwardCompatibilityDecorators:
 
 # Export main classes
 __all__ = [
-    "EventSource",
-    "EventTrigger",
+    "BackwardCompatibilityDecorators",
     "EventConfig",
     "EventHandler",
+    "EventSource",
+    "EventTrigger",
     "UniversalEventManager",
-    "BackwardCompatibilityDecorators",
 ]

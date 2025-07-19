@@ -4,7 +4,7 @@ Enhanced payload classes for event handling.
 Provides dict-like objects with dot notation access for convenient event data handling.
 """
 
-from typing import Any, Union
+from typing import Any
 
 
 class DotDict(dict):
@@ -197,21 +197,21 @@ class EventPayload(DotDict):
         return f"{self.model_name}.{self.event_type}"
 
     @property
-    def user_id(self) -> Union[int, None]:
+    def user_id(self) -> int | None:
         """Get user ID from various possible locations"""
         # Try different common locations for user_id
         if "user_id" in self:
             return self.user_id
-        elif hasattr(self.data, "user_id"):
+        if hasattr(self.data, "user_id"):
             return self.data.user_id
-        elif hasattr(self.data, "id") and self.model_name.lower() == "user":
+        if hasattr(self.data, "id") and self.model_name.lower() == "user":
             return self.data.id
-        elif hasattr(self.data, "user") and hasattr(self.data.user, "id"):
+        if hasattr(self.data, "user") and hasattr(self.data.user, "id"):
             return self.data.user.id
         return None
 
     @property
-    def entity_id(self) -> Union[int, str, None]:
+    def entity_id(self) -> int | str | None:
         """Get entity ID (the main object's ID)"""
         if hasattr(self.data, "id"):
             return self.data.id
@@ -360,10 +360,9 @@ def create_payload(data: dict[str, Any], source: str = "unknown") -> EventPayloa
     """
     if source == "websocket":
         return WebSocketPayload(data)
-    elif source == "webhook":
+    if source == "webhook":
         return WebhookPayload(data)
-    else:
-        return EventPayload(data)
+    return EventPayload(data)
 
 
 # Export main classes

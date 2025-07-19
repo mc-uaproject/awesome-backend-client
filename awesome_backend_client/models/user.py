@@ -1,42 +1,45 @@
 """User model with methods for user operations"""
 
-import logging
-from typing import TYPE_CHECKING, Optional
+from __future__ import annotations
 
-from uaproject_backend_schemas.models import (
-    Application as ApplicationSchema,
-)
-from uaproject_backend_schemas.models import (
-    Balance as BalanceSchema,
-)
-from uaproject_backend_schemas.models import (
-    Punishment as PunishmentSchema,
-)
-from uaproject_backend_schemas.models import (
-    Transaction as TransactionSchema,
-)
-from uaproject_backend_schemas.models import (
-    User as UserSchema,
-)
+import logging
+from typing import TYPE_CHECKING, Any
+
+from uaproject_backend_schemas.models.user import User as UserModel
 
 from awesome_backend_client.base import BaseBackendModel
-from awesome_backend_client.models.application import Application
-from awesome_backend_client.models.balance import Balance
-from awesome_backend_client.models.punishment import Punishment
-from awesome_backend_client.models.transaction import Transaction
 
 if TYPE_CHECKING:
-    from uaproject_backend_schemas.models.user import UserSchemaResponse
+    from uaproject_backend_schemas.models.application import (
+        Application as ApplicationSchema,
+    )
+    from uaproject_backend_schemas.models.balance import Balance as BalanceSchema
+    from uaproject_backend_schemas.models.punishment import (
+        Punishment as PunishmentSchema,
+    )
+    from uaproject_backend_schemas.models.transaction import (
+        Transaction as TransactionSchema,
+    )
+    from uaproject_backend_schemas.models.user import (
+        UserFilter,
+        UserSchemaResponse,
+        UserSchemaUpdate,
+    )
 
     from awesome_backend_client.client import UAProjectClient
-
 else:
-    UserSchemaResponse = UserSchema.schemas.response
+    UserSchemaResponse = UserModel.schemas.response
+    UserFilter = UserModel.filter
+    UserSchemaUpdate = UserModel.schemas.update
+    BalanceSchema = None
+    PunishmentSchema = None
+    TransactionSchema = None
+    ApplicationSchema = None
 
 logger = logging.getLogger(__name__)
 
 
-class User(BaseBackendModel, UserSchemaResponse):
+class User(BaseBackendModel):
     """
     User model with methods for user operations
 
@@ -45,93 +48,78 @@ class User(BaseBackendModel, UserSchemaResponse):
     (id, discord_id, minecraft_nickname, etc.)
     """
 
-    def __init__(self, user_schema: UserSchemaResponse, *, client: "UAProjectClient"):
-        super().__init__(user_schema, client=client)
+    _endpoint = "users"
 
-    async def refresh(self):
-        """Refresh user data from API"""
-        try:
-            fresh_data = await self._client.users.get(self.id)
-            # Convert dict response to UserSchema
-            self._schema = UserSchema.model_validate(fresh_data)
-        except Exception as e:
-            logger.error(f"Failed to refresh user {self.id}: {e}")
+    def __init__(self, user_schema: UserSchemaResponse, *, client: UAProjectClient):
+        BaseBackendModel.__init__(self, user_schema, client=client)
 
-    async def edit(self, **fields) -> "User":
-        """Edit user fields (discord.py style)"""
-        updated_data = await self._client.users.update(self.id, fields)
-        self._schema = UserSchema.model_validate(updated_data)
-        return self
-
-    async def delete(self) -> bool:
-        """Delete user"""
-        return await self._client.users.delete(self.id)
-
-    async def get_balance(self) -> Optional[Balance]:
+    @property
+    async def balance(self) -> Any | None:
         """Get user's balance"""
-        balance_data = await self._client.balances.list(filters={"user_id": self.id})
-        if balance_data:
-            balance_schema = BalanceSchema.model_validate(balance_data[0])
-            return Balance(balance_schema, client=self._client)
+        return await self.get("balance")
 
-    async def get_application(self) -> list[Application]:
+    async def applications(self, status: str | None = None, **filters) -> list[Any]:
         """Get user's applications"""
-        apps_data = await self._client.applications.list(filters={"user_id": self.id})
+        if status:
+            filters["status"] = status
+        return await self.get("applications", filters=filters)
 
-        return Application(
-            ApplicationSchema.model_validate(apps_data[0]), client=self._client
-        )
-
-    async def get_punishments(self, active_only: bool = True) -> list[Punishment]:
+    async def punishments(self, active_only: bool = True, **filters) -> list[Any]:
         """Get user's punishments"""
-        filters = {"user_id": self.id}
         if active_only:
             filters["is_active"] = True
+        return await self.get("punishments", filters=filters)
 
-        punishments_data = await self._client.punishments.list(filters=filters)
-
-        return [
-            Punishment(PunishmentSchema.model_validate(p), client=self._client)
-            for p in punishments_data
-        ]
+    async def transactions(self, limit: int = 100, **filters) -> list[Any]:
+        """Get user's transactions"""
+        return await self.get("transactions", filters=filters, limit=limit)
 
     async def add_balance(
         self, amount: float, reason: str = "Manual adjustment"
-    ) -> Transaction:
+    ) -> Any:
         """Add balance to user"""
-        transaction_data = await self._client.transactions.create(
-            {
+        return await self._client.http.post(
+            "/transactions",
+            json={
                 "user_id": self.id,
                 "amount": amount,
                 "type": "adjustment",
                 "reason": reason,
-            }
+            },
         )
-
-        transaction_schema = TransactionSchema.model_validate(transaction_data)
-        return Transaction(transaction_schema, client=self._client)
 
     async def remove_balance(
         self, amount: float, reason: str = "Manual adjustment"
-    ) -> Transaction:
+    ) -> Any:
         """Remove balance from user"""
-        transaction_data = await self._client.transactions.create(
-            {
+        return await self._client.http.post(
+            "/transactions",
+            json={
                 "user_id": self.id,
                 "amount": -abs(amount),
                 "type": "adjustment",
                 "reason": reason,
-            }
+            },
         )
 
-        transaction_schema = TransactionSchema.model_validate(transaction_data)
-        return Transaction(transaction_schema, client=self._client)
+    # Custom endpoints for User
+    async def set_minecraft_nickname(self, nickname: str) -> User:
+        """Set minecraft nickname for user"""
+        data = await self._client.http.post(
+            f"/users/{self.id}/set-minecraft-nickname", json={"nickname": nickname}
+        )
+
+        if isinstance(data, list | str):
+            msg = f"Expected a single user, got {type(data)}"
+            raise TypeError(msg)
+
+        self._update_from_dict(data)
+        return self
 
     def __str__(self) -> str:
-        # Use minecraft_nickname if available, fallback to id
-        nickname = getattr(self._schema, "minecraft_nickname", None)
+        nickname = self.get_attr("minecraft_nickname")
         return f"User(id={self.id}, nickname='{nickname or 'Unknown'}')"
 
     def __repr__(self) -> str:
-        nickname = getattr(self._schema, "minecraft_nickname", None)
+        nickname = self.get_attr("minecraft_nickname")
         return f"<User id={self.id} nickname='{nickname or 'Unknown'}'>"

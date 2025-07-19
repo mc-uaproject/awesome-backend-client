@@ -22,7 +22,7 @@ python = "^3.10"
 httpx = "^0.28.1"
 websockets = "^12.0"
 pydantic-settings = "^2.7.1"
-uaproject-backend-schemas = {git = "https://github.com/mc-uaproject/uaproject-backend-schemas.git", rev = "v2"}
+uaproject-backend-schemas = {git = "https://github.com/mc-uaproject/uaproject-backend-schemas", rev = "v2"}
 awesome-errors = {git = "https://github.com/mc-uaproject/awesome-errors"}
 
 [tool.poetry.group.dev.dependencies]
@@ -33,6 +33,7 @@ mypy = "^1.0.0"
 pre-commit = "^3.3.3"
 ruff = "^0.11.13"
 vulture = "^2.14"
+basedpyright = "^1.31.0"
 
 
 [build-system]
@@ -40,9 +41,68 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
-lint.select = ["E", "F", "W", "C", "I", "B", "TID", "UP"]
-lint.ignore = ["B008"]
+target-version = "py310"
+lint.select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "C",   # mccabe complexity
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "TID", # flake8-tidy-imports
+    "UP",  # pyupgrade
+    "A",   # flake8-builtins
+    "C4",  # flake8-comprehensions
+    "T20", # flake8-print
+    "SIM", # flake8-simplify
+    "ARG", # flake8-unused-arguments
+    "PL",  # pylint
+    "RUF", # ruff-specific
+    "PYI", # flake8-pyi
+    "TCH", # flake8-type-checking
+    "PTH", # flake8-use-pathlib
+    "S",   # flake8-bandit
+    "BLE", # flake8-blind-except
+    "FBT", # flake8-boolean-trap
+    "DTZ", # flake8-datetimez
+    "ICN", # flake8-import-conventions
+    "PIE", # flake8-pie
+    "T10", # flake8-debugger
+    "EM",  # flake8-errmsg
+    "FA",  # flake8-future-annotations
+    "ISC", # flake8-implicit-str-concat
+    "G",   # flake8-logging-format
+    "INP", # flake8-no-pep420
+    "RSE", # flake8-raise
+    "RET", # flake8-return
+    "SLF", # flake8-self
+    "SLOT", # flake8-slots
+    "TRY", # tryceratops
+    "FLY", # flynt
+    "PERF", # perflint
+    "FURB", # refurb
+    "LOG", # flake8-logging
+    "N",   # pep8-naming
+]
+lint.ignore = [
+    "B008",    # function-call-in-default-argument
+    "S101",    # assert
+    "PLR0913", # too-many-arguments
+    "PLR0912", # too-many-branches
+    "PLR0915", # too-many-statements
+    "C901",    # complex-structure
+    "PLC0414", # useless-import-alias
+    "RUF012",  # mutable-class-default
+    "T201",    # print
+    "T203",    # pprint
+    "FBT001",  # boolean-positional-arg-in-function-def
+    "FBT002",  # boolean-default-arg-in-function-def
+    "ARG001",  # unused-function-argument
+    "ARG002",  # unused-method-argument
+    "FA100",   # missing-future-annotations
+]
 exclude = ["venv", "__pycache__", "versions"]
+line-length = 88
 
 [tool.mypy]
 python_version = "3.10"
@@ -50,6 +110,8 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
+no_implicit_optional = true
+strict_optional = true
 
 [tool.vulture]
 exclude = ["*.ini", "Dockerfile", "*.lock", "*.toml"]

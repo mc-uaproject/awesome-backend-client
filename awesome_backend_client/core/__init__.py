@@ -4,8 +4,8 @@ from .config import settings
 from .errors import APIConnectionError, CRUDNotFoundError, CRUDValidationError
 
 __all__ = [
-    "settings",
+    "APIConnectionError",
     "CRUDNotFoundError",
     "CRUDValidationError",
-    "APIConnectionError",
+    "settings",
 ]

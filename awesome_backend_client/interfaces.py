@@ -3,7 +3,8 @@ Interfaces and abstract base classes for SOLID design
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Protocol, Union
+from collections.abc import Callable
+from typing import Any, Protocol
 
 
 class IHTTPClient(Protocol):
@@ -11,17 +12,17 @@ class IHTTPClient(Protocol):
 
     async def get(
         self, endpoint: str, **kwargs
-    ) -> Union[dict[str, Any], list[dict[str, Any]], str]: ...
+    ) -> dict[str, Any] | list[dict[str, Any]] | str: ...
 
     async def post(
         self, endpoint: str, **kwargs
-    ) -> Union[dict[str, Any], list[dict[str, Any]], str]: ...
+    ) -> dict[str, Any] | list[dict[str, Any]] | str: ...
 
     async def put(
         self, endpoint: str, **kwargs
-    ) -> Union[dict[str, Any], list[dict[str, Any]], str]: ...
+    ) -> dict[str, Any] | list[dict[str, Any]] | str: ...
 
-    async def delete(self, endpoint: str, **kwargs) -> Union[dict[str, Any], str]: ...
+    async def delete(self, endpoint: str, **kwargs) -> dict[str, Any] | str: ...
 
     async def close(self) -> None: ...
 
@@ -60,15 +61,15 @@ class ICRUDManager(Protocol):
 
     async def list(self, **kwargs) -> list[dict[str, Any]]: ...
 
-    async def get(self, item_id: Union[int, str]) -> dict[str, Any]: ...
+    async def get(self, item_id: int | str) -> dict[str, Any]: ...
 
     async def create(self, data: dict[str, Any]) -> dict[str, Any]: ...
 
     async def update(
-        self, item_id: Union[int, str], data: dict[str, Any]
+        self, item_id: int | str, data: dict[str, Any]
     ) -> dict[str, Any]: ...
 
-    async def delete(self, item_id: Union[int, str]) -> None: ...
+    async def delete(self, item_id: int | str) -> None: ...
 
 
 class ISettings(Protocol):
@@ -95,29 +96,22 @@ class BaseResourceManager(ABC):
     @abstractmethod
     async def list(self, **kwargs) -> list[dict[str, Any]]:
         """List resources"""
-        pass
 
     @abstractmethod
-    async def get(self, item_id: Union[int, str]) -> dict[str, Any]:
+    async def get(self, item_id: int | str) -> dict[str, Any]:
         """Get resource by ID"""
-        pass
 
     @abstractmethod
     async def create(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create resource"""
-        pass
 
     @abstractmethod
-    async def update(
-        self, item_id: Union[int, str], data: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def update(self, item_id: int | str, data: dict[str, Any]) -> dict[str, Any]:
         """Update resource"""
-        pass
 
     @abstractmethod
-    async def delete(self, item_id: Union[int, str]) -> None:
+    async def delete(self, item_id: int | str) -> None:
         """Delete resource"""
-        pass
 
 
 class EventHandler(ABC):
@@ -126,13 +120,11 @@ class EventHandler(ABC):
     @abstractmethod
     async def handle(self, event_data: Any) -> None:
         """Handle event"""
-        pass
 
     @property
     @abstractmethod
     def event_type(self) -> str:
         """Event type this handler processes"""
-        pass
 
 
 class IClientFactory(Protocol):
@@ -148,12 +140,9 @@ class IClientFactory(Protocol):
 class IServiceLocator(Protocol):
     """Service locator interface for dependency injection"""
 
-    def get_service(self, service_type: type) -> Any:  # noqa: ARG002
-        ...
+    def get_service(self, service_type: type) -> Any: ...
 
-    def register_service(  # noqa: ARG002
-        self, service_type: type, service_instance: Any
-    ) -> None: ...
+    def register_service(self, service_type: type, service_instance: Any) -> None: ...
 
 
 # Type aliases for better readability

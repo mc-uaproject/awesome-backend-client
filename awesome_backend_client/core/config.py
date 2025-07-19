@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Literal
 
 from pydantic import computed_field
@@ -33,7 +35,7 @@ class AwesomeBackendClientSettings(BaseSettings):
 
     # Library Constants
     USER_AGENT: str = "UAProject-PyLibrary/1.0"
-    BEARER_TOKEN_PREFIX: str = "Bearer"
+    BEARER_TOKEN_PREFIX: str = "Bearer"  # noqa: S105
     API_KEY_HEADER: str = "Authorization"
 
     # Webhook Headers
@@ -109,23 +111,23 @@ class AwesomeBackendClientSettings(BaseSettings):
     # Computed Properties
     @computed_field
     @property
-    def API_PREFIX(self) -> str:
+    def API_PREFIX(self) -> str:  # noqa: N802
         return f"/{self.API_VERSION}"
 
     @computed_field
     @property
-    def FULL_API_URL(self) -> str:
+    def FULL_API_URL(self) -> str:  # noqa: N802
         return f"{self.API_BASE_URL.rstrip('/')}{self.API_PREFIX}"
 
     @computed_field
     @property
-    def RETRYABLE_STATUS_CODES(self) -> set[int]:
+    def RETRYABLE_STATUS_CODES(self) -> set[int]:  # noqa: N802
         """HTTP status codes that should trigger retries"""
         return {429, 500, 502, 503, 504}
 
     @computed_field
     @property
-    def WEBSOCKET_URL(self) -> str:
+    def WEBSOCKET_URL(self) -> str:  # noqa: N802
         """WebSocket URL for real-time events"""
         ws_scheme = "wss" if self.API_BASE_URL.startswith("https") else "ws"
         base_url = self.API_BASE_URL.replace("https://", "").replace("http://", "")
@@ -133,18 +135,17 @@ class AwesomeBackendClientSettings(BaseSettings):
 
     @computed_field
     @property
-    def HTTP_HEADERS(self) -> dict[str, str]:
+    def HTTP_HEADERS(self) -> dict[str, str]:  # noqa: N802
         """Default HTTP headers for all requests"""
-        headers = {
+        return {
             "User-Agent": self.USER_AGENT,
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
-        return headers
 
     @computed_field
     @property
-    def ENVIRONMENT_CONFIG(self) -> dict[str, str]:
+    def ENVIRONMENT_CONFIG(self) -> dict[str, str]:  # noqa: N802
         """Environment-specific configuration"""
         configs = {
             "local": {

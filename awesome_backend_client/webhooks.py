@@ -9,7 +9,8 @@ import asyncio
 import hashlib
 import hmac
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from pydantic import BaseModel
 from uaproject_backend_schemas.models.schemas.webhook import (
@@ -31,17 +32,17 @@ logger = logging.getLogger(__name__)
 
 class WebhookAuthConfig(BaseModel):
     auth_type: WebhookAuthType
-    secret_key: Optional[str] = None
-    token: Optional[str] = None
-    username: Optional[str] = None
-    password: Optional[str] = None
+    secret_key: str | None = None
+    token: str | None = None
+    username: str | None = None
+    password: str | None = None
 
 
 class WebhookTemplate:
     """Predefined webhook templates for common use cases"""
 
     @staticmethod
-    def user_events(endpoint: str, secret_key: Optional[str] = None) -> WebhookConfig:
+    def user_events(endpoint: str, secret_key: str | None = None) -> WebhookConfig:
         """Template for user-related events"""
         return WebhookConfig(
             name="User Events Webhook",
@@ -80,7 +81,7 @@ class WebhookTemplate:
 
     @staticmethod
     def application_events(
-        endpoint: str, secret_key: Optional[str] = None
+        endpoint: str, secret_key: str | None = None
     ) -> WebhookConfig:
         """Template for application-related events"""
         return WebhookConfig(
@@ -119,7 +120,7 @@ class WebhookTemplate:
 
     @staticmethod
     def transaction_events(
-        endpoint: str, secret_key: Optional[str] = None
+        endpoint: str, secret_key: str | None = None
     ) -> WebhookConfig:
         """Template for transaction-related events"""
         return WebhookConfig(
@@ -196,7 +197,7 @@ class WebhookRegistrar:
         self._registered_webhooks: dict[str, int] = {}
         self._event_handlers: dict[str, list[Callable]] = {}
 
-    async def register_webhook(self, config: WebhookConfig) -> Optional[int]:
+    async def register_webhook(self, config: WebhookConfig) -> int | None:
         """Register a webhook with the backend"""
         try:
             webhook_data = {
@@ -276,7 +277,7 @@ class WebhookRegistrar:
 
     async def register_template(
         self, template_name: str, endpoint: str, **kwargs
-    ) -> Optional[int]:
+    ) -> int | None:
         """Register a predefined webhook template"""
         templates = {
             "user_events": WebhookTemplate.user_events,
@@ -293,7 +294,7 @@ class WebhookRegistrar:
 
     async def auto_register_common_webhooks(
         self, base_endpoint: str
-    ) -> dict[str, Optional[int]]:
+    ) -> dict[str, int | None]:
         """Automatically register common webhook templates"""
         if not settings.WEBHOOK_AUTO_REGISTER:
             logger.info("Webhook auto-registration is disabled")
@@ -311,9 +312,9 @@ class WebhookRegistrar:
 
     async def get_webhook_logs(
         self,
-        webhook_id: Optional[int] = None,
+        webhook_id: int | None = None,
         limit: int = 100,
-        status: Optional[str] = None,
+        status: str | None = None,
     ) -> list[dict[str, Any]]:
         """Get webhook execution logs"""
         params = {"limit": limit}
@@ -394,13 +395,13 @@ class WebhookEventDecorator:
 
 # Export main classes and functions
 __all__ = [
-    "WebhookEvent",
+    "WebhookAuthConfig",
     "WebhookAuthType",
     "WebhookConfig",
-    "WebhookTemplate",
+    "WebhookEvent",
+    "WebhookEventDecorator",
     "WebhookRegistrar",
     "WebhookSignatureValidator",
-    "WebhookEventDecorator",
+    "WebhookTemplate",
     "WebhookTrigger",
-    "WebhookAuthConfig",
 ]
