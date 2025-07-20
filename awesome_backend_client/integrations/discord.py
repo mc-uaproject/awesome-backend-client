@@ -5,10 +5,11 @@ import functools
 from typing import Any, Callable, ParamSpec, TypeVar
 
 from awesome_backend_client.client import UAProjectClient
+from awesome_backend_client.core.config import settings
 
 try:
     from disnake import ApplicationCommandInteraction
-    from disnake.ext.commands import Bot, Context
+    from disnake.ext.commands import Context
 
     DISCORD_AVAILABLE = True
 except ImportError:
@@ -16,7 +17,6 @@ except ImportError:
     # Create dummy types for type hints
     ApplicationCommandInteraction = Any
     Context = Any
-    Bot = Any
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -169,79 +169,15 @@ class DiscordIntegration:
         return decorator
 
 
-async def inject_uap_attributes(interaction_or_ctx, base_client: UAProjectClient):
-    """Inject uap_user and uap_client attributes into interaction/context"""
-    discord_id = interaction_or_ctx.author.id
-
-    try:
-        user_data = await base_client.users.get_by_discord_id(discord_id, _raise=False)
-        if user_data:
-            uap_client = UAProjectClient.with_impersonation(user_id=user_data.id)
-            interaction_or_ctx.uap_user = user_data
-            interaction_or_ctx.uap_client = uap_client
-        else:
-            interaction_or_ctx.uap_user = None
-            interaction_or_ctx.uap_client = base_client
-    except Exception:
-        interaction_or_ctx.uap_user = None
-        interaction_or_ctx.uap_client = base_client
-
-
-def setup_discord_middleware(bot: Bot, base_client: UAProjectClient):
-    """Setup Discord middleware to inject UAP attributes"""
-    if not DISCORD_AVAILABLE:
-        raise ImportError("disnake is required for Discord integration")
-
-    # Store original methods
-    original_process_application_commands = bot.process_application_commands
-    original_process_commands = bot.process_commands
-
-    async def enhanced_process_application_commands(interaction):
-        # Inject UAP attributes before processing
-        await inject_uap_attributes(interaction, base_client)
-        return await original_process_application_commands(interaction)
-
-    async def enhanced_process_commands(message):
-        # Get context first
-        ctx = await bot.get_context(message)
-        if ctx.command:
-            # Inject UAP attributes before processing
-            await inject_uap_attributes(ctx, base_client)
-        return await original_process_commands(message)
-
-    # Replace methods
-    bot.process_application_commands = enhanced_process_application_commands
-    bot.process_commands = enhanced_process_commands
-
-
-# Global integration instance
-_discord_integration: DiscordIntegration | None = None
-
-
-def setup_global_integration(base_client: UAProjectClient):
-    """Setup global Discord integration"""
-    global _discord_integration
-    _discord_integration = DiscordIntegration(base_client)
-
-
 def with_uap_user(fallback_to_base: bool = True, fetch_user: bool = True):
     """Short decorator for interaction commands with UAP user"""
-    if _discord_integration is None:
-        raise RuntimeError(
-            "Discord integration not setup. Call setup_global_integration() first"
-        )
-    return _discord_integration.with_user_from_interaction(fallback_to_base, fetch_user)
+    base_client = UAProjectClient(api_key=settings.BACKEND_API_KEY)
+    integration = DiscordIntegration(base_client)
+    return integration.with_user_from_interaction(fallback_to_base, fetch_user)
 
 
 def with_uap_ctx(fallback_to_base: bool = True, fetch_user: bool = True):
     """Short decorator for context commands with UAP user"""
-    if _discord_integration is None:
-        raise RuntimeError(
-            "Discord integration not setup. Call setup_global_integration() first"
-        )
-    return _discord_integration.with_user_from_context(fallback_to_base, fetch_user)
-
-
-def create_discord_integration(base_client: UAProjectClient) -> DiscordIntegration:
-    """Create a Discord integration instance"""
-    return DiscordIntegration(base_client)
+    base_client = UAProjectClient(api_key=settings.BACKEND_API_KEY)
+    integration = DiscordIntegration(base_client)
+    return integration.with_user_from_context(fallback_to_base, fetch_user)
