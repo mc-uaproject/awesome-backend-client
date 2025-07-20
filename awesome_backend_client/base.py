@@ -16,7 +16,9 @@ from uaproject_backend_schemas.base import (
 if TYPE_CHECKING:
     from awesome_backend_client.client import UAProjectClient
 
-BaseBackendModelType = TypeVar("BaseBackendModelType", bound="BaseBackendModel[Any, Any, Any]")
+BaseBackendModelType = TypeVar(
+    "BaseBackendModelType", bound="BaseBackendModel[Any, Any, Any]"
+)
 
 
 class BaseCRUDManager(
@@ -38,7 +40,7 @@ class BaseCRUDManager(
     def _convert_input_data(self, data: dict[str, Any] | BaseModel) -> dict[str, Any]:
         """Convert Pydantic model or dict to dict for API request"""
         if isinstance(data, BaseModel):
-            return data.model_dump(exclude_unset=True)
+            return data.model_dump(exclude_unset=True, mode="json")
         return data
 
     def _convert_to_model(
@@ -67,15 +69,17 @@ class BaseCRUDManager(
                 # Import schema dynamically using the main model class name from schema
                 from types import ModuleType
                 from typing import cast
-                
+
                 schema_module = cast(
-                    ModuleType, 
+                    ModuleType,
                     __import__(
                         f"uaproject_backend_schemas.models.{schema_name}",
                         fromlist=[schema_name.title()],
-                    )
+                    ),
                 )
-                schema_class = cast(type[BaseModel], getattr(schema_module, schema_name.title()))
+                schema_class = cast(
+                    type[BaseModel], getattr(schema_module, schema_name.title())
+                )
                 schema_obj = schema_class.model_validate(data)
                 return self.model_class(schema_obj, client=self.client)
             except (ImportError, AttributeError):
@@ -165,18 +169,20 @@ class BaseCRUDManager(
         """Delete resource by ID or 'me'"""
         await self.client.http.delete(f"{self.endpoint}/{item_id}")
 
-    async def get_by(self, *, _raise: bool = True, **filters: str | int | bool) -> BaseBackendModelType | dict[str, Any] | None:
+    async def get_by(
+        self, *, _raise: bool = True, **filters: str | int | bool
+    ) -> BaseBackendModelType | dict[str, Any] | None:
         """Get single resource by unique field(s). Raises error if not unique or not found."""
         results = await self.list(limit=2, _raise=_raise, **filters)
-        
+
         if not results:
             return None
-        
+
         if len(results) > 1:
             filter_str = ", ".join(f"{k}={v}" for k, v in filters.items())
             msg = f"Multiple {self.resource_name} found with {filter_str}, expected unique result"
             raise ValueError(msg)
-        
+
         return results[0]
 
     def extend_with_custom_methods(self, **custom_methods: Callable[..., Any]) -> None:
@@ -319,9 +325,7 @@ class BaseBackendModel(Generic[ModelType, FilterSchemaType, UpdateSchemaType]):
         if isinstance(fresh_data, dict):
             self._update_from_dict(fresh_data)
 
-    async def edit(
-        self, update_data: dict[str, Any] | UpdateSchemaType
-    ) -> Self:
+    async def edit(self, update_data: dict[str, Any] | UpdateSchemaType) -> Self:
         """Edit object fields"""
         converted_data = self._convert_update_data(update_data)
         updated_data = await self._client.http.put(
@@ -335,6 +339,6 @@ class BaseBackendModel(Generic[ModelType, FilterSchemaType, UpdateSchemaType]):
         """Delete object"""
         response = await self._client.http.delete(f"/{self._endpoint}/{self.id}")
         # HTTP DELETE typically returns 204 for successful deletion
-        # Since we don't have access to the actual response object, 
+        # Since we don't have access to the actual response object,
         # we assume success if no exception was raised
         return True
