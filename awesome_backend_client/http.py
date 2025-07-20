@@ -156,8 +156,10 @@ class HTTPClient:
         final_headers = {**self._get_default_headers(), **request_headers}
         if "X-Impersonate-User-ID" in final_headers:
             print(f"[DEBUG HTTP] {method} {endpoint} with impersonation: {final_headers['X-Impersonate-User-ID']}")
+            print(f"[DEBUG HTTP] Full headers: {final_headers}")
         else:
             print(f"[DEBUG HTTP] {method} {endpoint} without impersonation")
+            print(f"[DEBUG HTTP] Full headers: {final_headers}")
 
         last_exception: Exception | None = None
         max_retries = settings.MAX_RETRIES
