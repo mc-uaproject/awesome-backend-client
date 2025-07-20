@@ -37,6 +37,7 @@ class HTTPClient:
         base_url: str | None = None,
         api_key: str | None = None,
         impersonate_user_id: int | None = None,
+        impersonate_discord_id: int | None = None,
         settings_override: dict[str, Any] | None = None,
     ):
         # Apply environment-specific config
@@ -48,6 +49,7 @@ class HTTPClient:
         )
         self.api_key = api_key or settings.BACKEND_API_KEY
         self.impersonate_user_id = impersonate_user_id
+        self.impersonate_discord_id = impersonate_discord_id
         self._client: httpx.AsyncClient | None = None
 
         # Override settings if provided
@@ -83,6 +85,9 @@ class HTTPClient:
 
         if self.impersonate_user_id:
             headers["X-Impersonate-User-ID"] = str(self.impersonate_user_id)
+        
+        if self.impersonate_discord_id:
+            headers["X-Impersonate-Discord-ID"] = str(self.impersonate_discord_id)
 
         return headers
 

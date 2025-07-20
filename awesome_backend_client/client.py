@@ -56,11 +56,13 @@ class UAProjectClient:
         api_key: str | None = None,
         base_url: str | None = None,
         impersonate_user_id: int | None = None,
+        impersonate_discord_id: int | None = None,
     ):
         """Initialize UAProject client"""
         self.api_key = api_key or settings.BACKEND_API_KEY
         self.base_url = base_url or settings.FULL_API_URL
         self.impersonate_user_id = impersonate_user_id
+        self.impersonate_discord_id = impersonate_discord_id
 
         # Internal state
         self._ready = False
@@ -97,6 +99,7 @@ class UAProjectClient:
                 base_url=self.base_url,
                 api_key=self.api_key,
                 impersonate_user_id=self.impersonate_user_id,
+                impersonate_discord_id=self.impersonate_discord_id,
             )
         return self._http_client
 
@@ -349,6 +352,32 @@ class UAProjectClient:
             base_url=self.base_url,
             impersonate_user_id=user_id,
         )
+
+    def impersonate_discord(self, discord_id: int) -> "UAProjectClient":
+        """Create new client that impersonates a user by Discord ID"""
+        return UAProjectClient(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            impersonate_discord_id=discord_id,
+        )
+    
+    @classmethod
+    def with_impersonation(cls, *, discord_id: int | None = None, user_id: int | None = None, **kwargs) -> "UAProjectClient":
+        """Create client with impersonation (either Discord ID or user ID)"""
+        if discord_id is not None and user_id is not None:
+            raise ValueError("Cannot specify both discord_id and user_id")
+        if discord_id is None and user_id is None:
+            raise ValueError("Must specify either discord_id or user_id")
+        
+        if discord_id is not None:
+            return cls(impersonate_discord_id=discord_id, **kwargs)
+        else:
+            return cls(impersonate_user_id=user_id, **kwargs)
+
+    def discord_integration(self):
+        """Create Discord integration for this client"""
+        from awesome_backend_client.integrations.discord import DiscordIntegration
+        return DiscordIntegration(self)
 
     class ImpersonationContext:
         """Context manager for temporary user impersonation"""
