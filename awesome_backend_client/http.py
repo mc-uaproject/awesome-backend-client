@@ -151,6 +151,13 @@ class HTTPClient:
         url = urljoin(self.base_url, endpoint.lstrip("/"))
         request_headers = headers or {}
         request_data = self._prepare_request_data(data)
+        
+        # DEBUG: Log impersonation headers
+        final_headers = {**self._get_default_headers(), **request_headers}
+        if "X-Impersonate-User-ID" in final_headers:
+            print(f"[DEBUG HTTP] {method} {endpoint} with impersonation: {final_headers['X-Impersonate-User-ID']}")
+        else:
+            print(f"[DEBUG HTTP] {method} {endpoint} without impersonation")
 
         last_exception: Exception | None = None
         max_retries = settings.MAX_RETRIES
