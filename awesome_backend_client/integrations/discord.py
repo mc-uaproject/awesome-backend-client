@@ -104,25 +104,34 @@ class DiscordIntegration:
         def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
-                new_args = []
+                import inspect
+
+                # Get function signature to understand parameter positions
+                sig = inspect.signature(func)
+                param_names = list(sig.parameters.keys())
+
+                # Create bound arguments
+                bound_args = sig.bind(*args, **kwargs)
+                bound_args.apply_defaults()
+
                 interaction = None
 
-                for arg in args:
-                    if isinstance(arg, ApplicationCommandInteraction):
-                        interaction = arg
+                # Look for interaction in bound arguments
+                for param_name, value in bound_args.arguments.items():
+                    if isinstance(value, ApplicationCommandInteraction):
+                        interaction = value
                         await self._enhance_discord_object(
                             interaction, fallback_to_base, fetch_user
                         )
-                        new_args.append(interaction)
-                    else:
-                        new_args.append(arg)
+                        bound_args.arguments[param_name] = interaction
+                        break
 
                 if not interaction:
                     raise ValueError(
                         "No ApplicationCommandInteraction found in arguments"
                     )
 
-                return await func(*new_args, **kwargs)
+                return await func(*bound_args.args, **bound_args.kwargs)
 
             return wrapper
 
