@@ -85,7 +85,7 @@ class HTTPClient:
 
         if self.impersonate_user_id:
             headers["X-Impersonate-User-ID"] = str(self.impersonate_user_id)
-        
+
         if self.impersonate_discord_id:
             headers["X-Impersonate-Discord-ID"] = str(self.impersonate_discord_id)
 
@@ -253,6 +253,10 @@ class HTTPClient:
         self, response: httpx.Response, endpoint: str
     ) -> APIResponse:
         """Handle HTTP response"""
+        # Check for HTTP errors first
+        if response.status_code >= 400:
+            response.raise_for_status()
+
         if response.status_code == 204:
             return {}
 

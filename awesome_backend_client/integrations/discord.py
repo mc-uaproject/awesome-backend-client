@@ -56,39 +56,32 @@ class DiscordIntegration:
         self, obj, fallback_to_base: bool, fetch_user: bool
     ):
         """Common logic for enhancing interaction/context with UAP attributes"""
-        if fetch_user:
-            discord_id = obj.author.id
-            try:
-                user_data = await self.base_client.users.get_by_discord_id(
-                    discord_id, _raise=False
+        discord_id = obj.author.id
+        try:
+            # Always create impersonated client
+            user_client = UAProjectClient.with_impersonation(discord_id=discord_id)
+
+            if fetch_user:
+                # Get user data using impersonated client
+                user_data = await user_client.users.get_by_discord_id(
+                    discord_id, _raise=not fallback_to_base
                 )
+                obj.uap_user = user_data
+            else:
+                obj.uap_user = None
 
-                if user_data:
-                    user_client = UAProjectClient.with_impersonation(
-                        user_id=user_data.id
-                    )
-                    obj.uap_user = user_data
-                    obj.uap_client = user_client
-                elif fallback_to_base:
-                    obj.uap_user = None
-                    obj.uap_client = self.base_client
-                else:
-                    raise ValueError(f"User not found for Discord ID {discord_id}")
+            obj.uap_client = user_client
 
-            except Exception as e:
-                if fallback_to_base:
-                    obj.uap_user = None
-                    obj.uap_client = self.base_client
-                else:
-                    raise e
-        else:
-            # Skip user fetch, just add base client
-            obj.uap_user = None
-            obj.uap_client = self.base_client
+        except Exception as e:
+            if fallback_to_base:
+                obj.uap_user = None
+                obj.uap_client = self.base_client
+            else:
+                raise e
 
     def with_user_from_interaction(
         self,
-        fallback_to_base: bool = True,
+        fallback_to_base: bool = False,
         fetch_user: bool = True,
     ) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
         """
@@ -139,7 +132,7 @@ class DiscordIntegration:
 
     def with_user_from_context(
         self,
-        fallback_to_base: bool = True,
+        fallback_to_base: bool = False,
         fetch_user: bool = True,
     ) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
         """
