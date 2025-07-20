@@ -41,7 +41,11 @@ class HTTPClient:
     ):
         # Apply environment-specific config
         env_config = settings.ENVIRONMENT_CONFIG
-        self.base_url = base_url or (env_config.get("API_BASE_URL") if env_config else None) or settings.FULL_API_URL
+        self.base_url = (
+            base_url
+            or (env_config.get("API_BASE_URL") if env_config else None)
+            or settings.FULL_API_URL
+        )
         self.api_key = api_key or settings.BACKEND_API_KEY
         self.impersonate_user_id = impersonate_user_id
         self._client: httpx.AsyncClient | None = None
@@ -124,7 +128,9 @@ class HTTPClient:
             retry_after = self._get_retry_after(e.response.headers)
             raise APIRateLimitError(endpoint, retry_after) from e
         if e.response.status_code >= 500:
-            raise APIServerError(endpoint, e.response.status_code, str(backend_error)) from e
+            raise APIServerError(
+                endpoint, e.response.status_code, str(backend_error)
+            ) from e
         raise APIConnectionError(
             str(backend_error), endpoint, e.response.status_code
         ) from e
@@ -148,14 +154,21 @@ class HTTPClient:
         **kwargs: Any,
     ) -> APIResponse:
         """Make HTTP request with retry logic and error handling"""
-        url = urljoin(self.base_url, endpoint.lstrip("/"))
+        # Ensure base_url has trailing slash for proper urljoin behavior
+        if not self.base_url.endswith("/"):
+            base = self.base_url + "/"
+        else:
+            base = self.base_url
+        url = urljoin(base, endpoint.lstrip("/"))
         request_headers = headers or {}
         request_data = self._prepare_request_data(data)
-        
+
         # DEBUG: Log impersonation headers
         final_headers = {**self._get_default_headers(), **request_headers}
         if "X-Impersonate-User-ID" in final_headers:
-            print(f"[DEBUG HTTP] {method} {endpoint} with impersonation: {final_headers['X-Impersonate-User-ID']}")
+            print(
+                f"[DEBUG HTTP] {method} {endpoint} with impersonation: {final_headers['X-Impersonate-User-ID']}"
+            )
             print(f"[DEBUG HTTP] Full headers: {final_headers}")
         else:
             print(f"[DEBUG HTTP] {method} {endpoint} without impersonation")
@@ -183,10 +196,13 @@ class HTTPClient:
                     if attempt < max_retries:
                         last_exception = server_error
                         delay = min(
-                            settings.RETRY_DELAY * (settings.RETRY_BACKOFF_FACTOR**attempt),
+                            settings.RETRY_DELAY
+                            * (settings.RETRY_BACKOFF_FACTOR**attempt),
                             settings.MAX_RETRY_DELAY,
                         )
-                        logger.warning(f"Server error, retrying in {delay}s: {server_error}")
+                        logger.warning(
+                            f"Server error, retrying in {delay}s: {server_error}"
+                        )
                         await asyncio.sleep(delay)
                     else:
                         raise server_error from e
