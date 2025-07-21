@@ -8,15 +8,13 @@ from typing import (
     ClassVar,
     Generic,
     Protocol,
-    TypeVar,
     runtime_checkable,
 )
 
 if TYPE_CHECKING:
     from awesome_backend_client.client import UAProjectClient
 
-CreateSchemaType = TypeVar("CreateSchemaType")
-UpdateSchemaType = TypeVar("UpdateSchemaType")
+from uaproject_backend_schemas.base import CreateSchemaType, UpdateSchemaType
 
 
 @runtime_checkable

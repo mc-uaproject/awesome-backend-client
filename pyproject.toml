@@ -101,6 +101,9 @@ lint.ignore = [
     "ARG002",  # unused-method-argument
     "FA100",   # missing-future-annotations
     "G004",    # logging f-string
+    "TRY301",  # raise message
+    "TRY003", 
+    "EM101", 
 ]
 exclude = ["venv", "__pycache__", "versions"]
 line-length = 88

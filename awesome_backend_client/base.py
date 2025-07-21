@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from types import ModuleType
-from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel
 from uaproject_backend_schemas.base import (
@@ -15,15 +13,18 @@ from uaproject_backend_schemas.base import (
 )
 
 if TYPE_CHECKING:
-    from awesome_backend_client.client import UAProjectClient
+    from collections.abc import Callable
 
-BaseBackendModelType = TypeVar(
-    "BaseBackendModelType", bound="BaseBackendModel[Any, Any, Any]"
+    from awesome_backend_client.client import UAProjectClient
+    from awesome_backend_client.mixins import ClientModelProtocol
+
+ClientModelMixinType = TypeVar(
+    "ClientModelMixinType", bound="ClientModelProtocol"
 )
 
 
 class BaseCRUDManager(
-    Generic[BaseBackendModelType, CreateSchemaType, UpdateSchemaType, FilterSchemaType]
+    Generic[ClientModelMixinType, CreateSchemaType, UpdateSchemaType, FilterSchemaType]
 ):
     """Universal CRUD manager that works with any resource"""
 
@@ -31,7 +32,7 @@ class BaseCRUDManager(
         self,
         client: UAProjectClient,
         resource_name: str,
-        model_class: type[BaseBackendModelType] | None = None,
+        model_class: type[ClientModelMixinType] | None = None,
     ):
         self.client = client
         self.resource_name = resource_name
@@ -44,7 +45,7 @@ class BaseCRUDManager(
             return data.model_dump(exclude_unset=True, mode="json")
         return data
 
-    def _convert_to_model(self, data: dict[str, Any]) -> BaseBackendModelType:
+    def _convert_to_model(self, data: dict[str, Any]) -> ClientModelMixinType:
         """Convert API response to model object if model_class is set"""
         if not self.model_class:
             raise ValueError("model_class is not set")
@@ -52,39 +53,11 @@ class BaseCRUDManager(
         if not data:
             raise ValueError("data is empty")
 
-        # Get resource name mapping for schema imports
-        resource_mapping = {
-            "users": "user",
-            "roles": "role",
-            "applications": "application",
-            "balances": "balance",
-            "transactions": "transaction",
-            "punishments": "punishment",
-            "services": "service",
-            "files": "file",
-            "webhooks": "webhook",
-        }
-
-        schema_name = resource_mapping.get(
-            self.resource_name, self.resource_name.replace("-", "_")
-        )
-
-        schema_module = cast(
-            "ModuleType",
-            __import__(
-                f"uaproject_backend_schemas.models.{schema_name}",
-                fromlist=[schema_name.title()],
-            ),
-        )
-        schema_class = cast(
-            "type[BaseModel]", getattr(schema_module, schema_name.title())
-        )
-        schema_obj = schema_class.model_validate(data)
-        return self.model_class(schema_obj, client=self.client)
+        return self.model_class(**data, client=self.client)
 
     def _convert_to_models(
         self, data_list: list[dict[str, Any]]
-    ) -> list[BaseBackendModelType]:
+    ) -> list[ClientModelMixinType]:
         """Convert list of API responses to model objects"""
         return [self._convert_to_model(item) for item in data_list]
 
@@ -96,8 +69,8 @@ class BaseCRUDManager(
         sort: SortOrder | None = None,
         order: str = "asc",
         _raise: bool = True,
-        **filters: str | int | bool,
-    ) -> list[BaseBackendModelType]:
+        **filters: Any,
+    ) -> list[ClientModelMixinType]:
         """List resources with optional filtering and sorting"""
         params = {
             "skip": skip,
@@ -119,7 +92,7 @@ class BaseCRUDManager(
 
     async def get(
         self, item_id: int | Literal["me"], *, _raise: bool = True
-    ) -> BaseBackendModelType | None:
+    ) -> ClientModelMixinType | None:
         """Get resource by ID or 'me'"""
         try:
             data = await self.client.http.get(f"{self.endpoint}/{item_id}")
@@ -138,7 +111,7 @@ class BaseCRUDManager(
 
     async def create(
         self, data: CreateSchemaType | dict[str, Any]
-    ) -> BaseBackendModelType:
+    ) -> ClientModelMixinType:
         """Create new resource"""
         converted_data = self._convert_input_data(data)
         response_data = await self.client.http.post(self.endpoint, data=converted_data)
@@ -149,7 +122,7 @@ class BaseCRUDManager(
 
     async def update(
         self, item_id: int | Literal["me"], data: UpdateSchemaType | dict[str, Any]
-    ) -> BaseBackendModelType:
+    ) -> ClientModelMixinType:
         """Update resource by ID or 'me'"""
         converted_data = self._convert_input_data(data)
         response_data = await self.client.http.put(
@@ -166,7 +139,7 @@ class BaseCRUDManager(
 
     async def get_by(
         self, *, _raise: bool = True, **filters: str | int | bool
-    ) -> BaseBackendModelType | None:
+    ) -> ClientModelMixinType | None:
         """Get single resource by unique field(s). Raises error if not unique or not found."""
         results = await self.list(limit=2, _raise=_raise, **filters)
 

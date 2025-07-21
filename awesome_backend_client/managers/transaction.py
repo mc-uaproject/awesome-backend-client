@@ -24,13 +24,14 @@ else:
 
 
 class TransactionManager(
-    BaseCRUDManager[Transaction, TransactionSchemaCreate, TransactionSchemaUpdate, TransactionFilter]
+    BaseCRUDManager[
+        Transaction, TransactionSchemaCreate, TransactionSchemaUpdate, TransactionFilter
+    ]
 ):
     """Transaction resource manager with custom methods"""
 
     def __init__(self, client: UAProjectClient) -> None:
         super().__init__(client, "transactions", Transaction)
-
 
     async def get_user_summary(self, user_id: int) -> dict:
         """Get transaction summary for a user"""
