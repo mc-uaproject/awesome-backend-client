@@ -53,7 +53,7 @@ class BaseCRUDManager(
         if not data:
             raise ValueError("data is empty")
 
-        return self.model_class(**data, client=self.client)
+        return self.model_class(data, client=self.client)
 
     def _convert_to_models(
         self, data_list: list[dict[str, Any]]
