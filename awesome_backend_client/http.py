@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, TypeVar, Union
+from typing import Any, TypeVar
 from urllib.parse import urljoin
 
 import httpx
@@ -22,7 +22,7 @@ from .core.errors import (
 # Type aliases for API responses
 JSONDict = dict[str, Any]
 JSONList = list[JSONDict]
-APIResponse = Union[JSONDict, JSONList, str]
+APIResponse = JSONDict | JSONList | str
 
 T = TypeVar("T", bound=APIResponse)
 
@@ -168,16 +168,18 @@ class HTTPClient:
         request_headers = headers or {}
         request_data = self._prepare_request_data(data)
 
-        # DEBUG: Log impersonation headers
+        # DEBUG: Log impersonation
         final_headers = {**self._get_default_headers(), **request_headers}
         if "X-Impersonate-User-ID" in final_headers:
-            print(
-                f"[DEBUG HTTP] {method} {endpoint} with impersonation: {final_headers['X-Impersonate-User-ID']}"
+            logger.debug(
+                f"{method} {endpoint} with user impersonation: {final_headers['X-Impersonate-User-ID']}"
             )
-            print(f"[DEBUG HTTP] Full headers: {final_headers}")
+        elif "X-Impersonate-Discord-ID" in final_headers:
+            logger.debug(
+                f"{method} {endpoint} with discord impersonation: {final_headers['X-Impersonate-Discord-ID']}"
+            )
         else:
-            print(f"[DEBUG HTTP] {method} {endpoint} without impersonation")
-            print(f"[DEBUG HTTP] Full headers: {final_headers}")
+            logger.debug(f"{method} {endpoint} without impersonation")
 
         last_exception: Exception | None = None
         max_retries = settings.MAX_RETRIES

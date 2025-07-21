@@ -20,6 +20,7 @@ from .managers import (
     ApplicationManager,
     ApplicationSectionManager,
     BalanceManager,
+    ServiceManager,
     TransactionManager,
     UserManager,
 )
@@ -83,6 +84,7 @@ class UAProjectClient:
         # Resource managers (discord.py style) - Universal CRUD for all resources
         self.users = UserManager(self)
         self.balances = BalanceManager(self)
+        self.services = ServiceManager(self)
         self.transactions = TransactionManager(self)
         self.applications = ApplicationManager(self)
         self.application_sections = ApplicationSectionManager(self)

@@ -1,52 +1,68 @@
-"""Transaction model wrapper for UAProject backend"""
+"""Transaction model with methods for transaction operations"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+import logging
+from typing import TYPE_CHECKING, ClassVar
 
-if TYPE_CHECKING:
-    from awesome_backend_client.models.user import User
+from uaproject_backend_schemas.models.transaction import Transaction as TransactionModel
 
-from uaproject_backend_schemas.models.transaction import Transaction as TransactionSchema
-
-from awesome_backend_client.base import BaseBackendModel
+from awesome_backend_client.mixins import ClientModelMixin
 
 if TYPE_CHECKING:
     from uaproject_backend_schemas.models.transaction import (
-        TransactionFilter,
+        TransactionSchemaCreate,
+        TransactionSchemaResponse,
         TransactionSchemaUpdate,
     )
 
-    from awesome_backend_client.client import UAProjectClient
+    from awesome_backend_client.models.service import Service
+    from awesome_backend_client.models.user import User
 else:
-    TransactionFilter = TransactionSchema.filter
-    TransactionSchemaUpdate = TransactionSchema.schemas.update
+    TransactionSchemaCreate = TransactionModel.schemas.create
+    TransactionSchemaUpdate = TransactionModel.schemas.update
+    TransactionSchemaResponse = TransactionModel.schemas.response
+
+logger = logging.getLogger(__name__)
 
 
-class Transaction(BaseBackendModel[TransactionSchema, TransactionFilter, TransactionSchemaUpdate]):
-    """Transaction model with convenient methods"""
+class Transaction(
+    TransactionSchemaResponse,
+    ClientModelMixin[TransactionSchemaCreate, TransactionSchemaUpdate],
+):
+    """
+    Transaction model with direct inheritance from TransactionResponse schema.
 
-    _endpoint = "transactions"
+    All schema fields are accessible directly (id, user_id, recipient_id, amount, type, etc.)
+    with full typing support. Provides async methods for transaction operations.
+    """
 
-    def __init__(self, schema_obj: TransactionSchema, *, client: UAProjectClient):
-        super().__init__(schema_obj, client=client)
+    _endpoint: ClassVar[str] = "transactions"
 
-    async def get_user(self) -> User:
+    async def get_user(self) -> User | None:
         """Get the user who created this transaction"""
-        result = await self._client.users.get(self.user_id)
-        if isinstance(result, User):
-            return result
-        raise TypeError(f"Expected User, got {type(result)}")
+        if self.user_id is None:
+            return None
+        return await self._client.users.get(self.user_id, _raise=False)
 
-    async def get_recipient(self) -> User:
+    async def get_recipient(self) -> User | None:
         """Get the transaction recipient"""
-        result = await self._client.users.get(self.recipient_id)
-        if isinstance(result, User):
-            return result
-        raise TypeError(f"Expected User, got {type(result)}")
+        if self.recipient_id is None:
+            return None
+        return await self._client.users.get(self.recipient_id, _raise=False)
 
-    def __str__(self) -> str:
-        return f"Transaction(id={self.id}, type={self.type}, amount={self.amount})"
+    async def get_service(self) -> Service | None:
+        """Get the service if this is a purchase transaction"""
+        if self.service_id is None:
+            return None
+        return await self._client.services.get(self.service_id, _raise=False)
 
-    def __repr__(self) -> str:
-        return f"<Transaction id={self.id} user_id={self.user_id} recipient_id={self.recipient_id} amount={self.amount} type='{self.type}'>"
+    async def get_related_transactions(self, limit: int = 10) -> list[Transaction]:
+        """Get related transactions (same user or recipient)"""
+        filters = {}
+        if self.user_id:
+            filters["user_id"] = self.user_id
+        if self.recipient_id and self.recipient_id != self.user_id:
+            filters["recipient_id"] = self.recipient_id
+
+        return await self._client.transactions.list(limit=limit, **filters)

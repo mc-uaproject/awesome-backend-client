@@ -3,107 +3,140 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
+from uaproject_backend_schemas.models.schemas.transaction import TransactionType
 from uaproject_backend_schemas.models.user import User as UserModel
 
-from awesome_backend_client.base import BaseBackendModel
+from awesome_backend_client.mixins import ClientModelMixin
 
 if TYPE_CHECKING:
-    from uaproject_backend_schemas.models.application import (
-        Application as ApplicationSchema,
-    )
-    from uaproject_backend_schemas.models.balance import Balance as BalanceSchema
-    from uaproject_backend_schemas.models.punishment import (
-        Punishment as PunishmentSchema,
-    )
-    from uaproject_backend_schemas.models.transaction import (
-        Transaction as TransactionSchema,
-    )
     from uaproject_backend_schemas.models.user import (
-        UserFilter,
+        UserSchemaCreate,
         UserSchemaResponse,
         UserSchemaUpdate,
     )
 
-    from awesome_backend_client.client import UAProjectClient
+    from awesome_backend_client.models.application import Application
+    from awesome_backend_client.models.application_section import ApplicationSection
+    from awesome_backend_client.models.balance import Balance
+    from awesome_backend_client.models.punishment import Punishment
+    from awesome_backend_client.models.transaction import Transaction
 else:
-    UserSchemaResponse = UserModel.schemas.response
-    UserFilter = UserModel.filter
+    UserSchemaCreate = UserModel.schemas.create
     UserSchemaUpdate = UserModel.schemas.update
-    BalanceSchema = None
-    PunishmentSchema = None
-    TransactionSchema = None
-    ApplicationSchema = None
+    UserSchemaResponse = UserModel.schemas.response
 
 logger = logging.getLogger(__name__)
 
 
-class User(BaseBackendModel):
+class User(UserSchemaResponse, ClientModelMixin[UserSchemaCreate, UserSchemaUpdate]):
     """
-    User model with methods for user operations
+    User model with direct inheritance from UserResponse schema.
 
-    Wraps UserSchema from uaproject-backend-schemas and adds convenience methods.
-    All UserSchema properties are accessible directly
-    (id, discord_id, minecraft_nickname, etc.)
+    All schema fields are accessible directly (id, discord_id, minecraft_nickname, etc.)
+    with full typing support. Provides async methods for related data and operations.
     """
 
-    _endpoint = "users"
+    _endpoint: ClassVar[str] = "users"
 
-    def __init__(self, user_schema: UserSchemaResponse, *, client: UAProjectClient):
-        BaseBackendModel.__init__(self, user_schema, client=client)
-
-    @property
-    async def balance(self) -> Any | None:
+    async def get_balance(self) -> Balance | None:
         """Get user's balance"""
-        return await self.get("balance")
+        if self.id is None:
+            return None
+        return await self._client.balances.get_by_user_id(user_id=self.id, _raise=False)
 
-    async def applications(self, status: str | None = None, **filters: Any) -> list[Any]:
-        """Get user's applications"""
-        if status:
-            filters["status"] = status
-        return await self.get("applications", filters=filters)
+    async def get_application(self) -> Application | None:
+        """Get user's active application"""
+        if self.id is None:
+            return None
+        return await self._client.applications.get_by_user_id(
+            user_id=self.id, _raise=False
+        )
 
-    async def punishments(self, active_only: bool = True, **filters: Any) -> list[Any]:
+    async def get_application_sections(
+        self, application_id: int | None = None, **filters: Any
+    ) -> list[ApplicationSection]:
+        """Get user's application sections"""
+        if application_id:
+            filters["application_id"] = application_id
+        else:
+            application = await self.get_application()
+            if not application:
+                return []
+            filters["application_id"] = application.id
+
+        return await self._client.application_sections.list(**filters)
+
+    async def get_punishments(
+        self, active_only: bool = True, **filters: Any
+    ) -> list[Punishment]:
         """Get user's punishments"""
         if active_only:
             filters["is_active"] = True
-        return await self.get("punishments", filters=filters)
-
-    async def transactions(self, limit: int = 100, **filters: Any) -> list[Any]:
-        """Get user's transactions"""
-        return await self.get("transactions", filters=filters, limit=limit)
-
-    async def add_balance(
-        self, amount: float, reason: str = "Manual adjustment"
-    ) -> Any:
-        """Add balance to user"""
-        return await self._client.http.post(
-            "/transactions",
-            json={
-                "user_id": self.id,
-                "amount": amount,
-                "type": "adjustment",
-                "reason": reason,
-            },
+        filters["user_id"] = self.id
+        return (
+            await self._client.punishments.list(**filters)
+            if hasattr(self._client, "punishments")
+            else []
         )
+
+    async def get_transactions(
+        self, limit: int = 100, **filters: Any
+    ) -> list[Transaction]:
+        """Get user's transactions"""
+        filters["user_id"] = self.id
+        return await self._client.transactions.list(limit=limit, **filters)
+
+    # Balance operations - aliases to Balance model methods
+    async def add_balance(
+        self, amount: float, description: str = "Manual adjustment"
+    ) -> Transaction:
+        """Add balance to user (alias to Balance.add)"""
+        balance = await self.get_balance()
+        if balance:
+            return await balance.add(amount, description)
+
+        # If no balance exists, create transaction directly
+        transaction_data = {
+            "recipient_id": self.id,
+            "amount": amount,
+            "type": TransactionType.ADJUSTMENT,
+            "description": description,
+        }
+        return await self._client.transactions.create(transaction_data)
 
     async def remove_balance(
-        self, amount: float, reason: str = "Manual adjustment"
-    ) -> Any:
-        """Remove balance from user"""
-        return await self._client.http.post(
-            "/transactions",
-            json={
-                "user_id": self.id,
-                "amount": -abs(amount),
-                "type": "adjustment",
-                "reason": reason,
-            },
-        )
+        self, amount: float, description: str = "Manual adjustment"
+    ) -> Transaction:
+        """Remove balance from user (alias to Balance.remove)"""
+        balance = await self.get_balance()
+        if balance:
+            return await balance.remove(amount, description)
+
+        # If no balance exists, create transaction directly
+        return await self.add_balance(-abs(amount), description)
+
+    async def transfer_balance(
+        self, recipient_id: int, amount: float, description: str = "Transfer"
+    ) -> Transaction:
+        """Transfer balance to another user (alias to Balance.transfer_to_user)"""
+        balance = await self.get_balance()
+        if balance:
+            return await balance.transfer_to_user(recipient_id, amount, description)
+
+        # If no balance exists, create transaction directly
+        transaction_data = {
+            "user_id": self.id,
+            "recipient_id": recipient_id,
+            "amount": amount,
+            "type": TransactionType.TRANSFER,
+            "description": description,
+        }
+        return await self._client.transactions.create(transaction_data)
 
     # Custom endpoints for User
-    async def set_minecraft_nickname(self, nickname: str) -> User:
+    async def set_minecraft_nickname(self, nickname: str) -> Self:
         """Set minecraft nickname for user"""
         data = await self._client.http.post(
             f"/users/{self.id}/set-minecraft-nickname", json={"nickname": nickname}
@@ -115,11 +148,3 @@ class User(BaseBackendModel):
 
         self._update_from_dict(data)
         return self
-
-    def __str__(self) -> str:
-        nickname = self.get_attr("minecraft_nickname")
-        return f"User(id={self.id}, nickname='{nickname or 'Unknown'}')"
-
-    def __repr__(self) -> str:
-        nickname = self.get_attr("minecraft_nickname")
-        return f"<User id={self.id} nickname='{nickname or 'Unknown'}'>"

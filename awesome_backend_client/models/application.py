@@ -1,50 +1,53 @@
-"""Application model wrapper for UAProject backend"""
+"""Application model with methods for application operations"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import logging
+from typing import TYPE_CHECKING, Any, ClassVar
 
-if TYPE_CHECKING:
-    from awesome_backend_client.models.application_section import ApplicationSection
-    from awesome_backend_client.models.user import User
+from uaproject_backend_schemas.models.application import Application as ApplicationModel
 
-from uaproject_backend_schemas.models.application import Application as ApplicationSchema
-
-from awesome_backend_client.base import BaseBackendModel
+from awesome_backend_client.mixins import ClientModelMixin
 
 if TYPE_CHECKING:
     from uaproject_backend_schemas.models.application import (
-        ApplicationFilter,
+        ApplicationSchemaCreate,
+        ApplicationSchemaResponse,
         ApplicationSchemaUpdate,
     )
 
-    from awesome_backend_client.client import UAProjectClient
+    from awesome_backend_client.models.application_section import ApplicationSection
+    from awesome_backend_client.models.user import User
 else:
-    ApplicationFilter = ApplicationSchema.filter
-    ApplicationSchemaUpdate = ApplicationSchema.schemas.update
+    ApplicationSchemaCreate = ApplicationModel.schemas.create
+    ApplicationSchemaUpdate = ApplicationModel.schemas.update
+    ApplicationSchemaResponse = ApplicationModel.schemas.response
+
+logger = logging.getLogger(__name__)
 
 
-class Application(BaseBackendModel[ApplicationSchema, ApplicationFilter, ApplicationSchemaUpdate]):
-    """Application model with convenient methods"""
+class Application(
+    ApplicationSchemaResponse,
+    ClientModelMixin[ApplicationSchemaCreate, ApplicationSchemaUpdate],
+):
+    """
+    Application model with direct inheritance from ApplicationResponse schema.
 
-    _endpoint = "applications"
+    All schema fields are accessible directly (id, user_id, status, etc.)
+    with full typing support. Provides async methods for application operations.
+    """
 
-    def __init__(self, schema_obj: ApplicationSchema, *, client: UAProjectClient):
-        super().__init__(schema_obj, client=client)
+    _endpoint: ClassVar[str] = "applications"
 
-    async def get_user(self) -> User:
+    async def get_user(self) -> User | None:
         """Get the user who submitted this application"""
-        result = await self._client.users.get(self.user_id)
-        if isinstance(result, User):
-            return result
-        raise TypeError(f"Expected User, got {type(result)}")
+        if self.user_id is None:
+            return None
+        return await self._client.users.get(self.user_id, _raise=False)
 
-    async def get_sections(self) -> list[ApplicationSection]:
+    async def get_sections(self, **filters: Any) -> list[ApplicationSection]:
         """Get application sections"""
-        return await self._client.application_sections.get_by_application_id(self.id)
-
-    def __str__(self) -> str:
-        return f"Application(id={self.id}, user_id={self.user_id}, status={self.status})"
-
-    def __repr__(self) -> str:
-        return f"<Application id={self.id} user_id={self.user_id} status='{self.status}'>"
+        if self.id is None:
+            return []
+        filters["application_id"] = self.id
+        return await self._client.application_sections.list(**filters)

@@ -1,55 +1,94 @@
-"""ApplicationSection model wrapper for UAProject backend"""
+"""ApplicationSection model with methods for application section operations"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import logging
+from typing import TYPE_CHECKING, ClassVar, Self
 
-if TYPE_CHECKING:
-    from awesome_backend_client.models.application import Application
-    from awesome_backend_client.models.user import User
+from uaproject_backend_schemas.models.application_section import (
+    ApplicationSection as ApplicationSectionModel,
+)
 
-from uaproject_backend_schemas.models.application_section import ApplicationSection as ApplicationSectionSchema
-
-from awesome_backend_client.base import BaseBackendModel
+from awesome_backend_client.mixins import ClientModelMixin
 
 if TYPE_CHECKING:
     from uaproject_backend_schemas.models.application_section import (
-        ApplicationSectionFilter,
+        ApplicationSectionSchemaCreate,
+        ApplicationSectionSchemaResponse,
         ApplicationSectionSchemaUpdate,
     )
 
-    from awesome_backend_client.client import UAProjectClient
+    from awesome_backend_client.models.application import Application
+    from awesome_backend_client.models.user import User
 else:
-    ApplicationSectionFilter = ApplicationSectionSchema.filter
-    ApplicationSectionSchemaUpdate = ApplicationSectionSchema.schemas.update
+    ApplicationSectionSchemaCreate = ApplicationSectionModel.schemas.create
+    ApplicationSectionSchemaUpdate = ApplicationSectionModel.schemas.update
+    ApplicationSectionSchemaResponse = ApplicationSectionModel.schemas.response
+
+logger = logging.getLogger(__name__)
 
 
-class ApplicationSection(BaseBackendModel[ApplicationSectionSchema, ApplicationSectionFilter, ApplicationSectionSchemaUpdate]):
-    """ApplicationSection model with convenient methods"""
+class ApplicationSection(
+    ApplicationSectionSchemaResponse,
+    ClientModelMixin[ApplicationSectionSchemaCreate, ApplicationSectionSchemaUpdate],
+):
+    """
+    ApplicationSection model with direct inheritance from ApplicationSectionResponse schema.
 
-    _endpoint = "application-sections"
+    All schema fields are accessible directly (id, application_id, server_type, status, etc.)
+    with full typing support. Provides async methods for application section operations.
+    """
 
-    def __init__(self, schema_obj: ApplicationSectionSchema, *, client: UAProjectClient):
-        super().__init__(schema_obj, client=client)
+    _endpoint: ClassVar[str] = "application-sections"
 
-    async def get_application(self) -> Application:
+    async def get_application(self) -> Application | None:
         """Get the application this section belongs to"""
-        result = await self._client.applications.get(self.application_id)
-        if isinstance(result, Application):
-            return result
-        raise TypeError(f"Expected Application, got {type(result)}")
+        if self.application_id is None:
+            return None
+        return await self._client.applications.get(self.application_id, _raise=False)
 
     async def get_reviewer(self) -> User | None:
         """Get the user who reviewed this section"""
-        if self.reviewed_by:
-            result = await self._client.users.get(self.reviewed_by)
-            if isinstance(result, User):
-                return result
-            raise TypeError(f"Expected User, got {type(result)}")
-        return None
+        if self.reviewed_by is None:
+            return None
+        return await self._client.users.get(self.reviewed_by, _raise=False)
 
-    def __str__(self) -> str:
-        return f"ApplicationSection(id={self.id}, application_id={self.application_id}, server_type={self.server_type}, status={self.status})"
+    async def approve(self, reviewer_id: int | None = None) -> Self:
+        """Approve this application section"""
+        if reviewer_id is None:
+            if not hasattr(self._client, "impersonate_user_id"):
+                msg = "reviewer_id is required when not impersonating"
+                raise ValueError(msg)
+            reviewer_id = self._client.impersonate_user_id
 
-    def __repr__(self) -> str:
-        return f"<ApplicationSection id={self.id} application_id={self.application_id} server_type='{self.server_type}' status='{self.status}'>"
+        data = await self._client.http.post(
+            f"/application-sections/{self.id}/approve",
+            json={"reviewer_id": reviewer_id},
+        )
+
+        if isinstance(data, list | str):
+            msg = f"Expected a single application section, got {type(data)}"
+            raise TypeError(msg)
+
+        self._update_from_dict(data)
+        return self
+
+    async def reject(self, reason: str, reviewer_id: int | None = None) -> Self:
+        """Reject this application section"""
+        if reviewer_id is None:
+            if not hasattr(self._client, "impersonate_user_id"):
+                msg = "reviewer_id is required when not impersonating"
+                raise ValueError(msg)
+            reviewer_id = self._client.impersonate_user_id
+
+        data = await self._client.http.post(
+            f"/application-sections/{self.id}/reject",
+            json={"reason": reason, "reviewer_id": reviewer_id},
+        )
+
+        if isinstance(data, list | str):
+            msg = f"Expected a single application section, got {type(data)}"
+            raise TypeError(msg)
+
+        self._update_from_dict(data)
+        return self

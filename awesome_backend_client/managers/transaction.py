@@ -31,17 +31,6 @@ class TransactionManager(
     def __init__(self, client: UAProjectClient) -> None:
         super().__init__(client, "transactions", Transaction)
 
-    async def get_list(
-        self,
-        *,
-        filters: dict[str, str | int | bool] | None = None,
-        skip: int = 0,
-        limit: int = 100,
-        **extra_filters: str | int | bool,
-    ) -> list[Transaction]:
-        """Get multiple transactions with filters (alias for list method to match bot usage)"""
-        all_filters = {**(filters or {}), **extra_filters}
-        return await self.list(skip=skip, limit=limit, **all_filters)
 
     async def get_user_summary(self, user_id: int) -> dict:
         """Get transaction summary for a user"""

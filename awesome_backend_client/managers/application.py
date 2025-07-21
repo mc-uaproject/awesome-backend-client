@@ -31,24 +31,9 @@ class ApplicationManager(
     def __init__(self, client: UAProjectClient) -> None:
         super().__init__(client, "applications", Application)
 
-    async def get_by_user_id(self, user_id: int) -> Application:
+    async def get_by_user_id(self, user_id: int, _raise: bool = True) -> Application | None:
         """Get application by user ID (assumes user_id is unique for applications)"""
-        result = await self.get_by(user_id=user_id)
-        if isinstance(result, Application):
-            return result
-        raise TypeError(f"Expected Application, got {type(result)}")
-
-    async def get_many(
-        self,
-        *,
-        filters: dict[str, str | int | bool] | None = None,
-        skip: int = 0,
-        limit: int = 100,
-        **extra_filters: str | int | bool,
-    ) -> list[Application]:
-        """Get multiple applications with filters"""
-        all_filters = {**(filters or {}), **extra_filters}
-        return await self.list(skip=skip, limit=limit, **all_filters)
+        return await self.get_by(user_id=user_id, _raise=_raise)
 
     async def search(
         self,
